@@ -587,462 +587,210 @@ BigDecimal dailyRate = Equipment.calculateDailyRate(basePrice, equipmentType);
 
 ## API設計
 
-### OpenAPI 3.1 仕様
+### REST API エンドポイント
 
-```yaml
-# inventory-management-api.yml
-openapi: 3.1.0
-info:
-  title: Inventory Management Service API
-  version: 1.0.0
-  description: スキー用品ショップ 在庫管理サービス
+#### 設備管理
 
-servers:
-  - url: https://api.ski-shop.com/v1/inventory
-    description: Production server
-  - url: https://staging.api.ski-shop.com/v1/inventory
-    description: Staging server
-  - url: http://localhost:8084
-    description: Local development
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/equipment` | 設備一覧取得 |
+| GET | `/admin/equipment/{id}` | 設備詳細取得 |
+| GET | `/admin/equipment/sku/{sku}` | SKUによる設備取得 |
+| GET | `/admin/equipment/product/{productId}` | 商品IDによる設備取得 |
+| PUT | `/admin/equipment/{id}/rate` | レンタル料金更新 |
+| PUT | `/admin/equipment/{id}/activate` | 設備アクティベート |
+| PUT | `/admin/equipment/{id}/deactivate` | 設備ディアクティベート |
 
-paths:
-  /items/{sku}/stock:
-    get:
-      summary: 在庫レベル取得
-      operationId: getStockLevel
-      tags: [Stock Management]
-      parameters:
-        - name: sku
-          in: path
-          required: true
-          schema:
-            type: string
-          example: "SKI-ROSSIGNOL-HERO-165"
-      responses:
-        '200':
-          description: 在庫レベル情報
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StockLevelResponse'
-        '404':
-          description: SKUが見つからない
+#### 在庫管理
 
-    put:
-      summary: 在庫レベル更新
-      operationId: updateStockLevel
-      tags: [Stock Management]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: sku
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StockUpdateRequest'
-      responses:
-        '200':
-          description: 在庫更新成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StockLevelResponse'
-        '400':
-          description: 無効なリクエスト
-        '404':
-          description: SKUが見つからない
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/inventory/items` | 在庫アイテム一覧 |
+| GET | `/inventory/items/{id}` | 在庫アイテム詳細 |
+| POST | `/inventory/items` | 在庫アイテム作成 |
+| PUT | `/inventory/items/{id}` | 在庫アイテム更新 |
+| PUT | `/inventory/items/{id}/status` | 在庫状態更新 |
 
-  /items/bulk-check:
-    post:
-      summary: 複数SKUの在庫確認
-      operationId: bulkStockCheck
-      tags: [Stock Management]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/BulkStockCheckRequest'
-      responses:
-        '200':
-          description: 複数SKUの在庫情報
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BulkStockCheckResponse'
+#### レンタル予約
 
-  /reservations:
-    post:
-      summary: 在庫予約
-      operationId: reserveStock
-      tags: [Reservations]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StockReservationRequest'
-      responses:
-        '201':
-          description: 予約作成成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StockReservationResponse'
-        '400':
-          description: 在庫不足または無効なリクエスト
-        '404':
-          description: SKUが見つからない
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/reservations` | 予約一覧取得 |
+| GET | `/reservations/{id}` | 予約詳細取得 |
+| POST | `/reservations` | 予約作成 |
+| PUT | `/reservations/{id}/confirm` | 予約確定 |
+| DELETE | `/reservations/{id}` | 予約キャンセル |
 
-  /reservations/{reservationId}/confirm:
-    post:
-      summary: 在庫予約確定
-      operationId: confirmReservation
-      tags: [Reservations]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: reservationId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: 予約確定成功
-        '400':
-          description: 予約を確定できない
-        '404':
-          description: 予約が見つからない
+### 管理API実装
 
-  /reservations/{reservationId}/cancel:
-    post:
-      summary: 在庫予約キャンセル
-      operationId: cancelReservation
-      tags: [Reservations]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: reservationId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CancelReservationRequest'
-      responses:
-        '200':
-          description: 予約キャンセル成功
-        '404':
-          description: 予約が見つからない
+```java
+@Path("/admin")
+@ApplicationScoped
+public class AdminResource {
+    
+    @Inject
+    EquipmentService equipmentService;
+    
+    @Inject
+    DataMigrationService migrationService;
+    
+    @GET
+    @Path("/equipment")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getAllEquipment() {
+        List<Equipment> equipmentList = equipmentService.findRentalAvailable();
+        List<EquipmentResponse> response = equipmentList.stream()
+            .map(EquipmentResponse::from)
+            .collect(Collectors.toList());
+        return Response.ok(response).build();
+    }
+    
+    @GET
+    @Path("/equipment/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getEquipment(@PathParam("id") Long id) {
+        Equipment equipment = equipmentService.findById(id);
+        if (equipment == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+        EquipmentResponse response = EquipmentResponse.from(equipment);
+        return Response.ok(response).build();
+    }
+    
+    @GET
+    @Path("/equipment/sku/{sku}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getEquipmentBySku(@PathParam("sku") String sku) {
+        Equipment equipment = equipmentService.findBySku(sku);
+        if (equipment == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+        EquipmentResponse response = EquipmentResponse.from(equipment);
+        return Response.ok(response).build();
+    }
+    
+    @PUT
+    @Path("/equipment/{id}/rate")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updateDailyRate(@PathParam("id") Long id, 
+                                  @Valid RateUpdateRequest request) {
+        Equipment equipment = equipmentService.updateDailyRate(id, request.dailyRate());
+        if (equipment == null) {
+            return Response.status(Response.Status.NOT_FOUND).build();
+        }
+        EquipmentResponse response = EquipmentResponse.from(equipment);
+        return Response.ok(response).build();
+    }
+    
+    @GET
+    @Path("/migration/status")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getMigrationStatus() {
+        MigrationStatus status = migrationService.getMigrationStatus();
+        return Response.ok(status).build();
+    }
+    
+    @POST
+    @Path("/migration/legacy-to-cache")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response migrateLegacyToCache() {
+        migrationService.migrateLegacyDataToCache();
+        return Response.ok(Map.of("message", "Migration started")).build();
+    }
+}
+```
 
-  /items/low-stock:
-    get:
-      summary: 低在庫商品一覧
-      operationId: getLowStockItems
-      tags: [Stock Management]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: warehouse
-          in: query
-          schema:
-            type: string
-            format: uuid
-        - name: category
-          in: query
-          schema:
-            type: string
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            default: 50
-      responses:
-        '200':
-          description: 低在庫商品一覧
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LowStockItemsResponse'
+### DTOクラス設計
 
-  /warehouses/{warehouseId}/items:
-    get:
-      summary: 倉庫別在庫一覧
-      operationId: getWarehouseInventory
-      tags: [Warehouse Management]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: warehouseId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 0
-        - name: size
-          in: query
-          schema:
-            type: integer
-            default: 20
-      responses:
-        '200':
-          description: 倉庫在庫一覧
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WarehouseInventoryResponse'
+```java
+// 設備レスポンス
+public record EquipmentResponse(
+    Long id,
+    UUID productId,
+    String sku,
+    String name,
+    String category,
+    String brand,
+    String equipmentType,
+    BigDecimal dailyRate,
+    String sizeRange,
+    String difficultyLevel,
+    String description,
+    String imageUrl,
+    boolean isRentalAvailable,
+    boolean isActive,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt,
+    // キャッシュ情報
+    String cachedSku,
+    String cachedName,
+    String cachedCategory,
+    String cachedBrand,
+    String cachedEquipmentType,
+    BigDecimal cachedBasePrice,
+    LocalDateTime cacheUpdatedAt
+) {
+    public static EquipmentResponse from(Equipment equipment) {
+        return new EquipmentResponse(
+            equipment.getId(),
+            equipment.getProductId(),
+            equipment.getSku(),
+            equipment.getName(),
+            equipment.getCategory(),
+            equipment.getBrand(),
+            equipment.getEquipmentType(),
+            equipment.getDailyRate(),
+            equipment.getSizeRange(),
+            equipment.getDifficultyLevel(),
+            equipment.getDescription(),
+            equipment.getImageUrl(),
+            equipment.isRentalAvailable(),
+            equipment.isActive(),
+            equipment.getCreatedAt(),
+            equipment.getUpdatedAt(),
+            equipment.getCachedSku(),
+            equipment.getCachedName(),
+            equipment.getCachedCategory(),
+            equipment.getCachedBrand(),
+            equipment.getCachedEquipmentType(),
+            equipment.getCachedBasePrice(),
+            equipment.getCacheUpdatedAt()
+        );
+    }
+}
 
-  /items/{sku}/movements:
-    get:
-      summary: 在庫移動履歴
-      operationId: getStockMovementHistory
-      tags: [Stock Tracking]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: sku
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: from
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: to
-          in: query
-          schema:
-            type: string
-            format: date
-        - name: movementType
-          in: query
-          schema:
-            type: string
-            enum: [INBOUND, OUTBOUND, ADJUSTMENT, TRANSFER, RETURN, DAMAGE, THEFT]
-      responses:
-        '200':
-          description: 在庫移動履歴
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StockMovementHistoryResponse'
+// 料金更新リクエスト
+public record RateUpdateRequest(
+    @NotNull @DecimalMin("0.01") BigDecimal dailyRate
+) {}
 
-  /statistics:
-    get:
-      summary: 在庫統計情報
-      operationId: getInventoryStatistics
-      tags: [Analytics]
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          description: 在庫統計情報
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InventoryStatisticsResponse'
+// 在庫アイテムレスポンス
+public record InventoryItemResponse(
+    Long id,
+    Long equipmentId,
+    String serialNumber,
+    String status,
+    String location,
+    String size,
+    Integer conditionRating,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt
+) {}
 
-components:
-  schemas:
-    StockLevelResponse:
-      type: object
-      properties:
-        sku:
-          type: string
-          example: "SKI-ROSSIGNOL-HERO-165"
-        available:
-          type: integer
-          example: 25
-        reserved:
-          type: integer
-          example: 5
-        incoming:
-          type: integer
-          example: 10
-        total:
-          type: integer
-          example: 40
-        warehouse:
-          $ref: '#/components/schemas/WarehouseInfo'
-        reorderInfo:
-          $ref: '#/components/schemas/ReorderInfo'
-        status:
-          type: string
-          enum: [ACTIVE, INACTIVE, DISCONTINUED]
-        lastUpdated:
-          type: string
-          format: date-time
-
-    StockUpdateRequest:
-      type: object
-      required:
-        - quantity
-        - movementType
-      properties:
-        quantity:
-          type: integer
-          minimum: 0
-          example: 10
-        movementType:
-          type: string
-          enum: [INBOUND, OUTBOUND, ADJUSTMENT, TRANSFER, RETURN, DAMAGE, THEFT]
-          example: "INBOUND"
-        reason:
-          type: string
-          example: "新規入荷"
-        referenceId:
-          type: string
-          format: uuid
-          example: "123e4567-e89b-12d3-a456-426614174000"
-        referenceType:
-          type: string
-          example: "PURCHASE_ORDER"
-        notes:
-          type: string
-          example: "検品完了"
-
-    BulkStockCheckRequest:
-      type: object
-      required:
-        - items
-      properties:
-        items:
-          type: array
-          items:
-            type: object
-            required:
-              - sku
-              - quantity
-            properties:
-              sku:
-                type: string
-              quantity:
-                type: integer
-          example:
-            - sku: "SKI-ROSSIGNOL-HERO-165"
-              quantity: 2
-            - sku: "BOOT-SALOMON-PRO-27"
-              quantity: 1
-
-    BulkStockCheckResponse:
-      type: object
-      properties:
-        results:
-          type: array
-          items:
-            type: object
-            properties:
-              sku:
-                type: string
-              available:
-                type: integer
-              canFulfill:
-                type: boolean
-              shortfall:
-                type: integer
-
-    StockReservationRequest:
-      type: object
-      required:
-        - sku
-        - quantity
-        - orderId
-      properties:
-        sku:
-          type: string
-          example: "SKI-ROSSIGNOL-HERO-165"
-        quantity:
-          type: integer
-          minimum: 1
-          example: 2
-        orderId:
-          type: string
-          format: uuid
-          example: "123e4567-e89b-12d3-a456-426614174000"
-        customerId:
-          type: string
-          format: uuid
-          example: "123e4567-e89b-12d3-a456-426614174000"
-        expirationMinutes:
-          type: integer
-          minimum: 1
-          maximum: 1440
-          default: 30
-          example: 30
-
-    StockReservationResponse:
-      type: object
-      properties:
-        reservationId:
-          type: string
-          format: uuid
-        sku:
-          type: string
-        quantity:
-          type: integer
-        status:
-          type: string
-          enum: [ACTIVE, CONFIRMED, CANCELLED, EXPIRED]
-        expiresAt:
-          type: string
-          format: date-time
-        createdAt:
-          type: string
-          format: date-time
-
-    WarehouseInfo:
-      type: object
-      properties:
-        warehouseId:
-          type: string
-          format: uuid
-        name:
-          type: string
-        location:
-          type: string
-        isActive:
-          type: boolean
-
-    ReorderInfo:
-      type: object
-      properties:
-        reorderPoint:
-          type: integer
-        reorderQuantity:
-          type: integer
-        minimumLevel:
-          type: integer
-        maximumLevel:
-          type: integer
-        autoReorder:
-          type: boolean
-
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+// 予約レスポンス
+public record ReservationResponse(
+    Long id,
+    Long customerId,
+    Long equipmentId,
+    Long inventoryItemId,
+    LocalDateTime startDate,
+    LocalDateTime endDate,
+    String status,
+    BigDecimal totalAmount,
+    String sizeRequested,
+    LocalDateTime createdAt
+) {}
 ```
 
 ## データベース設計
@@ -1051,811 +799,519 @@ components:
 
 ```mermaid
 erDiagram
-    INVENTORY_ITEMS {
-        UUID id PK
-        UUID product_id FK
-        VARCHAR sku UK
-        UUID warehouse_id FK
-        INTEGER available_quantity
-        INTEGER reserved_quantity
-        INTEGER incoming_quantity
-        INTEGER minimum_stock_level
-        INTEGER maximum_stock_level
-        INTEGER reorder_point
-        INTEGER reorder_quantity
-        VARCHAR status
-        TIMESTAMP last_updated_at
-        TIMESTAMP created_at
-    }
-    
-    WAREHOUSES {
-        UUID id PK
+    EQUIPMENT {
+        BIGINT id PK
+        UUID product_id
+        VARCHAR sku
         VARCHAR name
-        VARCHAR code UK
-        VARCHAR location
-        VARCHAR address
+        VARCHAR category
+        VARCHAR brand
+        VARCHAR equipment_type
+        DECIMAL daily_rate
+        BOOLEAN is_rental_available
         BOOLEAN is_active
-        JSONB configuration
+        VARCHAR cached_sku
+        VARCHAR cached_name
+        VARCHAR cached_category
+        VARCHAR cached_brand
+        VARCHAR cached_equipment_type
+        DECIMAL cached_base_price
+        TEXT cached_description
+        TIMESTAMP cache_updated_at
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
     
-    STOCK_RESERVATIONS {
-        UUID id PK
-        UUID inventory_item_id FK
-        UUID order_id
-        UUID customer_id
-        INTEGER reserved_quantity
+    INVENTORY_ITEMS {
+        BIGINT id PK
+        BIGINT equipment_id FK
+        VARCHAR serial_number
         VARCHAR status
-        TIMESTAMP expires_at
+        VARCHAR location
+        VARCHAR size
+        INTEGER condition_rating
+        DATE purchase_date
+        DATE last_maintenance_date
+        DATE next_maintenance_date
+        INTEGER total_rental_count
+        TEXT notes
         TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+    
+    RESERVATIONS {
+        BIGINT id PK
+        BIGINT customer_id
+        BIGINT equipment_id FK
+        BIGINT inventory_item_id FK
+        TIMESTAMP start_date
+        TIMESTAMP end_date
+        VARCHAR status
+        DECIMAL total_amount
+        DECIMAL deposit_amount
+        VARCHAR size_requested
+        TEXT special_requests
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
         TIMESTAMP confirmed_at
+        TIMESTAMP completed_at
         TIMESTAMP cancelled_at
     }
     
-    STOCK_MOVEMENTS {
-        UUID id PK
-        UUID inventory_item_id FK
+    INVENTORY_MOVEMENTS {
+        BIGINT id PK
+        BIGINT inventory_item_id FK
         VARCHAR movement_type
-        INTEGER quantity
-        INTEGER previous_quantity
-        INTEGER new_quantity
-        UUID reference_id
-        VARCHAR reference_type
-        VARCHAR reason
+        VARCHAR from_location
+        VARCHAR to_location
+        VARCHAR from_status
+        VARCHAR to_status
+        BIGINT customer_id
+        BIGINT reservation_id FK
         TEXT notes
-        UUID created_by
-        TIMESTAMP created_at
+        TIMESTAMP movement_date
+        VARCHAR processed_by
     }
     
-    REORDER_RULES {
-        UUID id PK
-        UUID inventory_item_id FK
-        INTEGER reorder_point
-        INTEGER reorder_quantity
-        INTEGER minimum_level
-        INTEGER maximum_level
-        BOOLEAN auto_reorder
-        VARCHAR supplier_id
-        DECIMAL lead_time_days
+    LOCATIONS {
+        BIGINT id PK
+        VARCHAR code UK
+        VARCHAR name
+        VARCHAR location_type
+        TEXT address
+        VARCHAR phone
+        VARCHAR manager_name
         BOOLEAN is_active
         TIMESTAMP created_at
-        TIMESTAMP updated_at
     }
     
-    PURCHASE_ORDERS {
-        UUID id PK
-        VARCHAR order_number UK
-        UUID supplier_id
-        VARCHAR status
-        DECIMAL total_amount
-        VARCHAR currency
-        TIMESTAMP expected_delivery_date
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-    
-    PURCHASE_ORDER_ITEMS {
-        UUID id PK
-        UUID purchase_order_id FK
-        UUID inventory_item_id FK
-        INTEGER ordered_quantity
-        INTEGER received_quantity
-        DECIMAL unit_price
-        DECIMAL total_price
-        VARCHAR status
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-    
-    STOCK_ALERTS {
-        UUID id PK
-        UUID inventory_item_id FK
-        VARCHAR alert_type
-        VARCHAR severity
-        VARCHAR message
-        BOOLEAN acknowledged
-        UUID acknowledged_by
-        TIMESTAMP acknowledged_at
-        TIMESTAMP created_at
-    }
-    
-    INVENTORY_ITEMS ||--o{ STOCK_RESERVATIONS : "has"
-    INVENTORY_ITEMS ||--o{ STOCK_MOVEMENTS : "tracks"
-    INVENTORY_ITEMS ||--o{ REORDER_RULES : "follows"
-    INVENTORY_ITEMS ||--o{ PURCHASE_ORDER_ITEMS : "includes"
-    INVENTORY_ITEMS ||--o{ STOCK_ALERTS : "generates"
-    WAREHOUSES ||--o{ INVENTORY_ITEMS : "stores"
-    PURCHASE_ORDERS ||--o{ PURCHASE_ORDER_ITEMS : "contains"
+    EQUIPMENT ||--o{ INVENTORY_ITEMS : "has"
+    EQUIPMENT ||--o{ RESERVATIONS : "for"
+    INVENTORY_ITEMS ||--o{ INVENTORY_MOVEMENTS : "tracks"
+    INVENTORY_ITEMS ||--o{ RESERVATIONS : "reserves"
+    RESERVATIONS ||--o{ INVENTORY_MOVEMENTS : "generates"
 ```
 
-### 詳細エンティティ設計
+### Equipment テーブル設計
+
+```sql
+CREATE TABLE equipment (
+    id BIGSERIAL PRIMARY KEY,
+    product_id UUID NOT NULL, -- 商品カタログサービスとの連携
+    -- 旧フィールド（段階的移行のため一時的に保持）
+    sku VARCHAR(100) UNIQUE,
+    name VARCHAR(200),
+    category VARCHAR(100),
+    brand VARCHAR(100),
+    equipment_type VARCHAR(50),
+    size_range VARCHAR(50),
+    difficulty_level VARCHAR(20),
+    description TEXT,
+    image_url VARCHAR(500),
+    -- ビジネス固有フィールド
+    daily_rate DECIMAL(10,2) NOT NULL,
+    is_rental_available BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    -- キャッシュフィールド（商品カタログサービスから同期）
+    cached_sku VARCHAR(100),
+    cached_name VARCHAR(200),
+    cached_category VARCHAR(100),
+    cached_brand VARCHAR(100),
+    cached_equipment_type VARCHAR(50),
+    cached_size_range VARCHAR(50),
+    cached_difficulty_level VARCHAR(20),
+    cached_base_price DECIMAL(10,2),
+    cached_description TEXT,
+    cached_image_url VARCHAR(500),
+    cache_updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- タイムスタンプ
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- インデックス作成
+CREATE INDEX idx_equipment_product_id ON equipment(product_id);
+CREATE INDEX idx_equipment_cached_sku ON equipment(cached_sku);
+CREATE INDEX idx_equipment_cached_equipment_type ON equipment(cached_equipment_type);
+CREATE INDEX idx_equipment_rental_available ON equipment(is_rental_available);
+CREATE INDEX idx_equipment_is_active ON equipment(is_active);
+
+-- 更新時刻自動更新トリガー
+CREATE TRIGGER update_equipment_updated_at 
+    BEFORE UPDATE ON equipment 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+```
+
+### Inventory Items テーブル設計
+
+```sql
+CREATE TABLE inventory_items (
+    id BIGSERIAL PRIMARY KEY,
+    equipment_id BIGINT NOT NULL REFERENCES equipment(id),
+    serial_number VARCHAR(100) UNIQUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE', 
+    -- AVAILABLE, RENTED, MAINTENANCE, RETIRED
+    location VARCHAR(100) NOT NULL DEFAULT 'MAIN_STORE',
+    size VARCHAR(20),
+    condition_rating INTEGER DEFAULT 5 CHECK (condition_rating >= 1 AND condition_rating <= 5),
+    purchase_date DATE,
+    last_maintenance_date DATE,
+    next_maintenance_date DATE,
+    total_rental_count INTEGER DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_inventory_items_equipment_id ON inventory_items(equipment_id);
+CREATE INDEX idx_inventory_items_status ON inventory_items(status);
+CREATE INDEX idx_inventory_items_location ON inventory_items(location);
+```
+
+### Reservations テーブル設計
+
+```sql
+CREATE TABLE reservations (
+    id BIGSERIAL PRIMARY KEY,
+    customer_id BIGINT NOT NULL,
+    equipment_id BIGINT NOT NULL REFERENCES equipment(id),
+    inventory_item_id BIGINT REFERENCES inventory_items(id),
+    start_date TIMESTAMP NOT NULL,
+    end_date TIMESTAMP NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING', 
+    -- PENDING, CONFIRMED, ACTIVE, COMPLETED, CANCELLED
+    total_amount DECIMAL(10,2),
+    deposit_amount DECIMAL(10,2),
+    size_requested VARCHAR(20),
+    special_requests TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    confirmed_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    cancelled_at TIMESTAMP
+);
+
+CREATE INDEX idx_reservations_customer_id ON reservations(customer_id);
+CREATE INDEX idx_reservations_equipment_id ON reservations(equipment_id);
+CREATE INDEX idx_reservations_status ON reservations(status);
+CREATE INDEX idx_reservations_start_date ON reservations(start_date);
+```
+
+### データ移行戦略
+
+Event-Driven Architectureの導入に伴う段階的移行：
+
+#### Phase 1: キャッシュフィールド追加
+- 既存のequipmentテーブルにcachedフィールドを追加
+- Product Catalog Serviceからのイベント受信開始
+- 旧フィールドと新フィールドの並行運用
+
+#### Phase 2: データ同期確立
+- Product Eventの消費による自動キャッシュ更新
+- データ整合性チェック機能の実装
+- 管理画面での移行状況モニタリング
+
+#### Phase 3: 段階的切り替え
+- 新規設備は cached フィールドのみ使用
+- 既存設備は段階的にキャッシュデータに移行
+- クエリロジックの cached フィールド優先に変更
+
+#### Phase 4: 旧フィールド削除
+- データ移行完了後、旧フィールドを削除
+- cached_ プレフィックスを削除してフィールド名を整理
+
+### 移行サービス実装
 
 ```java
-// 倉庫エンティティ
-@Entity
-@Table(name = "warehouses")
-public class Warehouse {
+@ApplicationScoped
+@Transactional
+public class DataMigrationService {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @Inject
+    Logger logger;
     
-    @Column(name = "name", nullable = false)
-    private String name;
+    @PersistenceContext
+    EntityManager entityManager;
     
-    @Column(name = "code", unique = true, nullable = false)
-    private String code;
+    /**
+     * 移行状況確認
+     */
+    public MigrationStatus getMigrationStatus() {
+        String sql = """
+            SELECT 
+                COUNT(*) as total_equipment,
+                COUNT(CASE WHEN cached_sku IS NOT NULL THEN 1 END) as cached_equipment,
+                COUNT(CASE WHEN cached_sku IS NULL AND sku IS NOT NULL THEN 1 END) as legacy_equipment
+            FROM equipment
+            """;
+        
+        Object[] result = (Object[]) entityManager.createNativeQuery(sql).getSingleResult();
+        
+        long totalEquipment = ((Number) result[0]).longValue();
+        long cachedEquipment = ((Number) result[1]).longValue();
+        long legacyEquipment = ((Number) result[2]).longValue();
+        
+        double migrationPercentage = totalEquipment > 0 ? 
+            (double) cachedEquipment / totalEquipment * 100 : 0;
+        
+        return new MigrationStatus(
+            totalEquipment,
+            cachedEquipment,
+            legacyEquipment,
+            migrationPercentage,
+            legacyEquipment == 0 // migration completed
+        );
+    }
     
-    @Column(name = "location")
-    private String location;
+    /**
+     * 旧データをキャッシュフィールドに移行
+     */
+    public void migrateLegacyDataToCache() {
+        String sql = """
+            UPDATE equipment 
+            SET 
+                cached_sku = sku,
+                cached_name = name,
+                cached_category = category,
+                cached_brand = brand,
+                cached_equipment_type = equipment_type,
+                cached_description = description,
+                cached_image_url = image_url,
+                cache_updated_at = CURRENT_TIMESTAMP
+            WHERE cached_sku IS NULL AND sku IS NOT NULL
+            """;
+        
+        int updatedCount = entityManager.createNativeQuery(sql).executeUpdate();
+        
+        logger.info("Migrated {} legacy equipment records to cache fields", updatedCount);
+    }
     
-    @Column(name = "address")
-    private String address;
-    
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive = true;
-    
-    @Column(name = "configuration", columnDefinition = "JSONB")
-    private String configuration;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-    
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-    
-    // 関連エンティティ
-    @OneToMany(mappedBy = "warehouse", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<InventoryItem> inventoryItems = new ArrayList<>();
-}
-
-// 発注ルールエンティティ
-@Entity
-@Table(name = "reorder_rules")
-public class ReorderRule {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-    
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "inventory_item_id", nullable = false)
-    private InventoryItem inventoryItem;
-    
-    @Column(name = "reorder_point", nullable = false)
-    private Integer reorderPoint;
-    
-    @Column(name = "reorder_quantity", nullable = false)
-    private Integer reorderQuantity;
-    
-    @Column(name = "minimum_level", nullable = false)
-    private Integer minimumLevel;
-    
-    @Column(name = "maximum_level", nullable = false)
-    private Integer maximumLevel;
-    
-    @Column(name = "auto_reorder", nullable = false)
-    private Boolean autoReorder = false;
-    
-    @Column(name = "supplier_id")
-    private UUID supplierId;
-    
-    @Column(name = "lead_time_days", precision = 5, scale = 2)
-    private BigDecimal leadTimeDays;
-    
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive = true;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-    
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-    
-    public boolean shouldTriggerReorder(Integer currentStock) {
-        return isActive && autoReorder && currentStock <= reorderPoint;
+    /**
+     * データ整合性チェック
+     */
+    public List<DataInconsistency> checkDataConsistency() {
+        String sql = """
+            SELECT id, sku, cached_sku, name, cached_name
+            FROM equipment 
+            WHERE (sku IS NOT NULL AND cached_sku IS NOT NULL AND sku != cached_sku)
+               OR (name IS NOT NULL AND cached_name IS NOT NULL AND name != cached_name)
+            """;
+        
+        @SuppressWarnings("unchecked")
+        List<Object[]> results = entityManager.createNativeQuery(sql).getResultList();
+        
+        return results.stream()
+            .map(row -> new DataInconsistency(
+                ((Number) row[0]).longValue(),
+                (String) row[1],
+                (String) row[2],
+                (String) row[3],
+                (String) row[4]
+            ))
+            .collect(Collectors.toList());
     }
 }
 
-// 発注エンティティ
-@Entity
-@Table(name = "purchase_orders")
-public class PurchaseOrder {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-    
-    @Column(name = "order_number", unique = true, nullable = false)
-    private String orderNumber;
-    
-    @Column(name = "supplier_id", nullable = false)
-    private UUID supplierId;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    private PurchaseOrderStatus status;
-    
-    @Column(name = "total_amount", precision = 12, scale = 2)
-    private BigDecimal totalAmount;
-    
-    @Column(name = "currency", length = 3)
-    private String currency = "JPY";
-    
-    @Column(name = "expected_delivery_date")
-    private LocalDate expectedDeliveryDate;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-    
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-    
-    // 関連エンティティ
-    @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<PurchaseOrderItem> items = new ArrayList<>();
-}
+// DTOクラス
+public record MigrationStatus(
+    long totalEquipment,
+    long cachedEquipment,
+    long legacyEquipment,
+    double migrationPercentage,
+    boolean migrationCompleted
+) {}
 
-// 発注明細エンティティ
-@Entity
-@Table(name = "purchase_order_items")
-public class PurchaseOrderItem {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "purchase_order_id", nullable = false)
-    private PurchaseOrder purchaseOrder;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "inventory_item_id", nullable = false)
-    private InventoryItem inventoryItem;
-    
-    @Column(name = "ordered_quantity", nullable = false)
-    private Integer orderedQuantity;
-    
-    @Column(name = "received_quantity", nullable = false)
-    private Integer receivedQuantity = 0;
-    
-    @Column(name = "unit_price", precision = 10, scale = 2)
-    private BigDecimal unitPrice;
-    
-    @Column(name = "total_price", precision = 12, scale = 2)
-    private BigDecimal totalPrice;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    private PurchaseOrderItemStatus status;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-    
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
-    
-    public boolean isFullyReceived() {
-        return receivedQuantity.equals(orderedQuantity);
-    }
-    
-    public Integer getPendingQuantity() {
-        return orderedQuantity - receivedQuantity;
-    }
-}
-
-// 在庫アラートエンティティ
-@Entity
-@Table(name = "stock_alerts")
-public class StockAlert {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "inventory_item_id", nullable = false)
-    private InventoryItem inventoryItem;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(name = "alert_type", nullable = false)
-    private AlertType alertType;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(name = "severity", nullable = false)
-    private AlertSeverity severity;
-    
-    @Column(name = "message", nullable = false)
-    private String message;
-    
-    @Column(name = "acknowledged", nullable = false)
-    private Boolean acknowledged = false;
-    
-    @Column(name = "acknowledged_by")
-    private UUID acknowledgedBy;
-    
-    @Column(name = "acknowledged_at")
-    private LocalDateTime acknowledgedAt;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-}
-
-// Repository設計（Jakarta Data活用）
-@Repository
-public interface InventoryItemRepository extends BasicRepository<InventoryItem, UUID> {
-    
-    @Query("SELECT i FROM InventoryItem i WHERE i.sku = :sku")
-    Optional<InventoryItem> findBySku(String sku);
-    
-    @Query("""
-        SELECT i FROM InventoryItem i 
-        WHERE i.availableQuantity <= i.reorderPoint 
-        AND i.status = 'ACTIVE'
-        ORDER BY i.availableQuantity ASC
-        """)
-    List<InventoryItem> findLowStockItems();
-    
-    @Query("""
-        SELECT i FROM InventoryItem i 
-        WHERE i.availableQuantity = 0 
-        AND i.status = 'ACTIVE'
-        """)
-    List<InventoryItem> findOutOfStockItems();
-    
-    @Query("SELECT i FROM InventoryItem i WHERE i.warehouseId = :warehouseId")
-    List<InventoryItem> findByWarehouseId(UUID warehouseId);
-    
-    @Query("SELECT COUNT(i) FROM InventoryItem i WHERE i.availableQuantity <= i.reorderPoint")
-    long countLowStockItems();
-    
-    @Query("SELECT COUNT(i) FROM InventoryItem i WHERE i.availableQuantity = 0")
-    long countOutOfStockItems();
-    
-    @Query("""
-        SELECT SUM(i.availableQuantity * p.price) 
-        FROM InventoryItem i 
-        JOIN Product p ON i.productId = p.id
-        """)
-    BigDecimal calculateTotalInventoryValue();
-}
-
-@Repository
-public interface StockReservationRepository extends BasicRepository<StockReservation, UUID> {
-    
-    @Query("""
-        SELECT r FROM StockReservation r 
-        WHERE r.status = 'ACTIVE' 
-        AND r.expiresAt < :currentTime
-        """)
-    List<StockReservation> findExpiredReservations(LocalDateTime currentTime);
-    
-    default List<StockReservation> findExpiredReservations() {
-        return findExpiredReservations(LocalDateTime.now());
-    }
-    
-    @Query("SELECT r FROM StockReservation r WHERE r.orderId = :orderId")
-    List<StockReservation> findByOrderId(UUID orderId);
-    
-    @Query("SELECT r FROM StockReservation r WHERE r.customerId = :customerId AND r.status = 'ACTIVE'")
-    List<StockReservation> findActiveReservationsByCustomer(UUID customerId);
-}
-
-// Enums
-public enum PurchaseOrderStatus {
-    DRAFT("下書き"),
-    PENDING("承認待ち"),
-    APPROVED("承認済み"),
-    SENT("発注済み"),
-    PARTIALLY_RECEIVED("部分入荷"),
-    COMPLETED("完了"),
-    CANCELLED("キャンセル");
-    
-    private final String description;
-    
-    PurchaseOrderStatus(String description) {
-        this.description = description;
-    }
-    
-    public String getDescription() {
-        return description;
-    }
-}
-
-public enum PurchaseOrderItemStatus {
-    PENDING("待機中"),
-    PARTIALLY_RECEIVED("部分入荷"),
-    COMPLETED("完了"),
-    CANCELLED("キャンセル");
-    
-    private final String description;
-    
-    PurchaseOrderItemStatus(String description) {
-        this.description = description;
-    }
-    
-    public String getDescription() {
-        return description;
-    }
-}
-
-public enum AlertType {
-    LOW_STOCK("低在庫"),
-    OUT_OF_STOCK("在庫切れ"),
-    OVERSTOCK("過剰在庫"),
-    EXPIRED_RESERVATION("期限切れ予約"),
-    REORDER_TRIGGERED("自動発注実行");
-    
-    private final String description;
-    
-    AlertType(String description) {
-        this.description = description;
-    }
-    
-    public String getDescription() {
-        return description;
-    }
-}
-
-public enum AlertSeverity {
-    LOW("低"),
-    MEDIUM("中"),
-    HIGH("高"),
-    CRITICAL("緊急");
-    
-    private final String description;
-    
-    AlertSeverity(String description) {
-        this.description = description;
-    }
-    
-    public String getDescription() {
-        return description;
-    }
-}
+public record DataInconsistency(
+    Long equipmentId,
+    String legacySku,
+    String cachedSku,
+    String legacyName,
+    String cachedName
+) {}
 ```
 
-### CQRS Commands、Queries、Projections
+## レンタル管理設計 {#rental-management-design}
+
+### レンタル業務フロー
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant F as Frontend
+    participant I as Inventory Service
+    participant E as Equipment Service
+    participant R as Reservation Service
+    
+    C->>F: レンタル商品検索
+    F->>E: 設備一覧取得
+    E-->>F: 利用可能設備リスト
+    F-->>C: 設備表示（料金含む）
+    
+    C->>F: レンタル予約
+    F->>R: 予約作成リクエスト
+    R->>I: 在庫確認
+    I-->>R: 在庫状況
+    R->>I: 在庫予約
+    I-->>R: 予約完了
+    R-->>F: 予約確定
+    F-->>C: 予約確認
+    
+    Note over C,R: レンタル開始
+    C->>F: 機材受け取り
+    F->>R: 予約確定
+    R->>I: 在庫ステータス更新
+    
+    Note over C,R: レンタル終了
+    C->>F: 機材返却
+    F->>R: 返却処理
+    R->>I: 在庫ステータス更新
+```
+
+### 料金計算ロジック
+
+レンタル料金は以下の要素で構成されます：
+
+1. **基本料金**: Equipment.dailyRate × レンタル日数
+2. **サイズ調整**: 特別サイズの場合の追加料金
+3. **コンディション調整**: 設備の状態による割引
+4. **シーズン調整**: ピークシーズンの料金調整
 
 ```java
-// CQRS Commands
-public sealed interface InventoryCommand permits 
-    ReserveInventoryCommand, ReleaseInventoryCommand, ConfirmInventoryCommand, 
-    AdjustInventoryCommand, CreateInventoryItemCommand {
-}
-
-public record ReserveInventoryCommand(
-    UUID commandId,
-    String sku,
-    Integer quantity,
-    UUID orderId,
-    UUID customerId,
-    LocalDateTime timestamp
-) implements InventoryCommand {}
-
-public record ReleaseInventoryCommand(
-    UUID commandId,
-    UUID reservationId,
-    UUID orderId,
-    String reason,
-    LocalDateTime timestamp
-) implements InventoryCommand {}
-
-public record ConfirmInventoryCommand(
-    UUID commandId,
-    UUID reservationId,
-    UUID orderId,
-    LocalDateTime timestamp
-) implements InventoryCommand {}
-
-public record AdjustInventoryCommand(
-    UUID commandId,
-    String sku,
-    Integer previousQuantity,
-    Integer newQuantity,
-    String reason,
-    LocalDateTime timestamp
-) implements InventoryCommand {}
-
-public record CreateInventoryItemCommand(
-    UUID commandId,
-    String sku,
-    String productName,
-    String description,
-    BigDecimal unitCost,
-    Integer initialQuantity,
-    Integer minimumQuantity,
-    Integer maximumQuantity,
-    String location,
-    LocalDateTime timestamp
-) implements InventoryCommand {}
-
-// CQRS Queries
-public sealed interface InventoryQuery permits 
-    GetInventoryBySkuQuery, GetLowStockItemsQuery, GetStockMovementHistoryQuery, 
-    GetInventoryStatisticsQuery, SearchInventoryQuery {
-}
-
-public record GetInventoryBySkuQuery(
-    UUID queryId,
-    String sku,
-    LocalDateTime timestamp
-) implements InventoryQuery {}
-
-public record GetLowStockItemsQuery(
-    UUID queryId,
-    Integer threshold,
-    LocalDateTime timestamp
-) implements InventoryQuery {}
-
-public record GetStockMovementHistoryQuery(
-    UUID queryId,
-    String sku,
-    LocalDate fromDate,
-    LocalDate toDate,
-    LocalDateTime timestamp
-) implements InventoryQuery {}
-
-public record GetInventoryStatisticsQuery(
-    UUID queryId,
-    Integer lowStockThreshold,
-    LocalDateTime timestamp
-) implements InventoryQuery {}
-
-public record SearchInventoryQuery(
-    UUID queryId,
-    InventorySearchCriteria criteria,
-    int page,
-    int size,
-    LocalDateTime timestamp
-) implements InventoryQuery {}
-
-// CQRS Projections (Read Models)
-public record InventoryProjection(
-    UUID id,
-    String sku,
-    String productName,
-    String description,
-    Integer availableQuantity,
-    Integer reservedQuantity,
-    Integer minimumQuantity,
-    Integer maximumQuantity,
-    BigDecimal unitCost,
-    String location,
-    StockStatus status,
-    LocalDateTime lastUpdatedAt
-) {
-    public static InventoryProjection from(InventoryItem item) {
-        return new InventoryProjection(
-            item.getId(),
-            item.getSku(),
-            item.getProductName(),
-            item.getDescription(),
-            item.getAvailableQuantity(),
-            item.getReservedQuantity(),
-            item.getMinimumQuantity(),
-            item.getMaximumQuantity(),
-            item.getUnitCost(),
-            item.getLocation(),
-            item.getStockStatus(),
-            item.getLastUpdatedAt()
-        );
+@ApplicationScoped
+public class RentalPricingService {
+    
+    public BigDecimal calculateRentalPrice(Equipment equipment, 
+                                         LocalDate startDate, 
+                                         LocalDate endDate,
+                                         String requestedSize,
+                                         Integer conditionRating) {
+        
+        long rentalDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        BigDecimal basePrice = equipment.getDailyRate().multiply(BigDecimal.valueOf(rentalDays));
+        
+        // サイズ調整
+        BigDecimal sizeAdjustment = calculateSizeAdjustment(equipment, requestedSize);
+        
+        // コンディション調整
+        BigDecimal conditionAdjustment = calculateConditionAdjustment(conditionRating);
+        
+        // シーズン調整
+        BigDecimal seasonAdjustment = calculateSeasonAdjustment(startDate, endDate);
+        
+        return basePrice
+            .multiply(BigDecimal.ONE.add(sizeAdjustment))
+            .multiply(BigDecimal.ONE.add(conditionAdjustment))
+            .multiply(BigDecimal.ONE.add(seasonAdjustment));
+    }
+    
+    private BigDecimal calculateSizeAdjustment(Equipment equipment, String requestedSize) {
+        // 特別サイズの場合の追加料金
+        if ("XS".equals(requestedSize) || "XXL".equals(requestedSize)) {
+            return BigDecimal.valueOf(0.1); // 10%増し
+        }
+        return BigDecimal.ZERO;
+    }
+    
+    private BigDecimal calculateConditionAdjustment(Integer conditionRating) {
+        // コンディションによる割引
+        return switch (conditionRating) {
+            case 5 -> BigDecimal.ZERO; // 新品同様
+            case 4 -> BigDecimal.valueOf(-0.05); // 5%割引
+            case 3 -> BigDecimal.valueOf(-0.1); // 10%割引
+            case 2 -> BigDecimal.valueOf(-0.2); // 20%割引
+            case 1 -> BigDecimal.valueOf(-0.3); // 30%割引
+            default -> BigDecimal.ZERO;
+        };
+    }
+    
+    private BigDecimal calculateSeasonAdjustment(LocalDate startDate, LocalDate endDate) {
+        // ピークシーズン（12月～3月）の料金調整
+        boolean isPeakSeason = isPeakSeason(startDate) || isPeakSeason(endDate);
+        return isPeakSeason ? BigDecimal.valueOf(0.2) : BigDecimal.ZERO; // 20%増し
+    }
+    
+    private boolean isPeakSeason(LocalDate date) {
+        int month = date.getMonthValue();
+        return month == 12 || month == 1 || month == 2 || month == 3;
     }
 }
-
-public record StockMovementProjection(
-    UUID id,
-    String sku,
-    MovementType movementType,
-    Integer quantity,
-    Integer previousQuantity,
-    Integer newQuantity,
-    String reason,
-    String reference,
-    LocalDateTime createdAt
-) {
-    public static StockMovementProjection from(StockMovement movement) {
-        return new StockMovementProjection(
-            movement.getId(),
-            movement.getInventoryItem().getSku(),
-            movement.getMovementType(),
-            movement.getQuantity(),
-            movement.getPreviousQuantity(),
-            movement.getNewQuantity(),
-            movement.getReason(),
-            movement.getReference(),
-            movement.getCreatedAt()
-        );
-    }
-}
-
-public record InventoryStatisticsProjection(
-    long totalItems,
-    long lowStockItems,
-    long outOfStockItems,
-    BigDecimal totalValue,
-    LocalDateTime calculatedAt
-) {}
-
-public record InventorySearchCriteria(
-    String skuPattern,
-    String productNamePattern,
-    StockStatus status,
-    Integer minQuantity,
-    Integer maxQuantity,
-    String location
-) {}
-
-// Inventory Events
-public sealed interface InventoryEvent permits 
-    InventoryReservedEvent, InventoryReleasedEvent, InventoryConfirmedEvent, 
-    InventoryAdjustedEvent, InventoryReservationFailedEvent {
-}
-
-public record InventoryReservedEvent(
-    UUID orderId,
-    String sku,
-    Integer quantity,
-    UUID reservationId,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-public record InventoryReleasedEvent(
-    UUID orderId,
-    UUID reservationId,
-    String reason,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-public record InventoryConfirmedEvent(
-    UUID orderId,
-    UUID reservationId,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-public record InventoryAdjustedEvent(
-    String sku,
-    Integer previousQuantity,
-    Integer newQuantity,
-    String reason,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-public record InventoryReservationFailedEvent(
-    UUID orderId,
-    String sku,
-    Integer quantity,
-    String reason,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-// Result Classes
-public record InventoryResult(
-    boolean success,
-    UUID reservationId,
-    String message
-) {}
-
-public record InventoryReservationResult(
-    boolean success,
-    List<UUID> reservationIds,
-    String message
-) {}
-
-// External Events from Order Service
-public record OrderCreatedEvent(
-    UUID orderId,
-    String orderNumber,
-    UUID customerId,
-    List<OrderItemDto> orderItems,
-    LocalDateTime timestamp
-) {}
-
-public record OrderCancelledEvent(
-    UUID orderId,
-    String orderNumber,
-    String reason,
-    LocalDateTime timestamp
-) {}
-
-public record OrderItemDto(
-    UUID productId,
-    String sku,
-    String productName,
-    BigDecimal unitPrice,
-    Integer quantity
-) {}
-
-// CQRS Annotations
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface CommandHandler {}
-
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface QueryHandler {}
-
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface EventHandler {}
 ```
-
-## 在庫管理設計 {#inventory-management-design}
-
-### 在庫レベル管理
-
-在庫管理サービスでは、複数の在庫レベルを総合的に管理し、正確な在庫状況の把握と適切な在庫補充を実現します。
-
-#### 在庫レベル構成
-
-- **利用可能在庫**: 実際に販売可能な在庫数
-- **予約在庫**: 注文により一時的に確保された在庫数
-- **入荷予定在庫**: 発注済みで入荷待ちの在庫数
-- **最小在庫レベル**: 在庫切れを防ぐための最低限の在庫数
-- **最大在庫レベル**: 過剰在庫を防ぐための上限在庫数
-
-### 自動発注システム
-
-在庫レベルが設定された閾値を下回った場合、自動的に発注処理を実行するシステムを実装しています。
-
-#### 発注ルール設定
-
-- **発注点**: 自動発注を実行する在庫レベル
-- **発注量**: 一回の発注で注文する数量
-- **リードタイム**: 発注から入荷までの期間
-- **安全在庫**: 需要変動や納期遅延に対するバッファ
-
-## 在庫追跡設計 {#inventory-tracking-design}
-
-### 在庫移動履歴管理
-
-すべての在庫変動を詳細に記録し、トレーサビリティを確保します。
-
-#### 移動タイプ分類
-
-- **入荷 (INBOUND)**: 仕入先からの商品入荷
-- **出荷 (OUTBOUND)**: 顧客への商品出荷
-- **調整 (ADJUSTMENT)**: 棚卸しによる数量調整
-- **移動 (TRANSFER)**: 倉庫間での在庫移動
-- **返品 (RETURN)**: 顧客からの返品
-- **損傷 (DAMAGE)**: 商品の損傷による在庫減少
-- **紛失 (THEFT)**: 盗難や紛失による在庫減少
-
-### リアルタイム在庫追跡
-
-Apache Kafkaを活用したイベント駆動アーキテクチャにより、在庫変動をリアルタイムで追跡・通知します。
 
 ## エラー処理 {#error-handling}
 
-### 在庫関連例外クラス
+### 例外クラス設計
 
 ```java
-public class InventoryNotFoundException extends RuntimeException {
-    public InventoryNotFoundException(String message) {
+// ベース例外クラス
+public abstract class InventoryManagementException extends RuntimeException {
+    protected final String errorCode;
+    
+    protected InventoryManagementException(String errorCode, String message) {
         super(message);
+        this.errorCode = errorCode;
+    }
+    
+    public String getErrorCode() {
+        return errorCode;
     }
 }
 
-public class InsufficientStockException extends RuntimeException {
+// 具体的な例外クラス
+public class EquipmentNotFoundException extends InventoryManagementException {
+    public EquipmentNotFoundException(String message) {
+        super("EQUIPMENT_NOT_FOUND", message);
+    }
+}
+
+public class InsufficientStockException extends InventoryManagementException {
     public InsufficientStockException(String message) {
-        super(message);
+        super("INSUFFICIENT_STOCK", message);
     }
 }
 
-public class InvalidReservationStateException extends RuntimeException {
+public class InvalidReservationStateException extends InventoryManagementException {
     public InvalidReservationStateException(String message) {
-        super(message);
+        super("INVALID_RESERVATION_STATE", message);
     }
 }
+
+public class EventProcessingException extends InventoryManagementException {
+    public EventProcessingException(String message) {
+        super("EVENT_PROCESSING_ERROR", message);
+    }
+}
+
+// グローバル例外ハンドラー
+@Provider
+public class InventoryExceptionMapper implements ExceptionMapper<Exception> {
+    
+    @Override
+    public Response toResponse(Exception exception) {
+        if (exception instanceof InventoryManagementException ime) {
+            return Response.status(getHttpStatus(ime))
+                .entity(new ErrorResponse(ime.getErrorCode(), ime.getMessage()))
+                .type(MediaType.APPLICATION_JSON)
+                .build();
+        }
+        
+        return Response.status(500)
+            .entity(new ErrorResponse("INTERNAL_ERROR", "内部エラーが発生しました"))
+            .type(MediaType.APPLICATION_JSON)
+            .build();
+    }
+    
+    private int getHttpStatus(InventoryManagementException exception) {
+        return switch (exception.getErrorCode()) {
+            case "EQUIPMENT_NOT_FOUND" -> 404;
+            case "INSUFFICIENT_STOCK" -> 400;
+            case "INVALID_RESERVATION_STATE" -> 400;
+            default -> 500;
+        };
+    }
+}
+
+public record ErrorResponse(String errorCode, String message) {}
 ```
-
-### エラー処理戦略
-
-- **在庫不足エラー**: 在庫予約失敗時の適切なレスポンス
-- **タイムアウトエラー**: 長時間処理時の自動キャンセル
-- **データ整合性エラー**: トランザクション管理による一貫性保証
-- **外部サービス連携エラー**: サーキットブレーカーパターンの適用
 
 ## テスト設計 {#test-design}
 
@@ -1863,40 +1319,125 @@ public class InvalidReservationStateException extends RuntimeException {
 
 ```java
 @ExtendWith(MockitoExtension.class)
-class InventoryServiceTest {
-    
-    @Mock
-    private InventoryItemRepository inventoryRepository;
-    
-    @Mock
-    private InventoryEventPublisher eventPublisher;
+class EquipmentServiceTest {
     
     @InjectMocks
-    private InventoryService inventoryService;
+    private EquipmentService equipmentService;
+    
+    @Mock
+    private EntityManager entityManager;
     
     @Test
-    void testReserveStock_Success() {
-        // テスト実装
+    void testCreateEquipmentFromProduct_Success() {
+        // Given
+        ProductCreatedEvent event = new ProductCreatedEvent(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "SKI-TEST-001",
+            "テストスキー",
+            "SKI_BOARD",
+            "Rossignol",
+            "SKI_BOARD",
+            new BigDecimal("50000"),
+            "165cm",
+            "INTERMEDIATE",
+            "テスト用スキー",
+            "https://example.com/image.jpg",
+            true,
+            LocalDateTime.now()
+        );
+        
+        // When
+        Equipment result = equipmentService.createEquipmentFromProduct(event);
+        
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getCachedSku()).isEqualTo("SKI-TEST-001");
+        assertThat(result.getDailyRate()).isEqualTo(new BigDecimal("6000.00")); // 50000 * 0.1 * 1.2
+        
+        verify(entityManager).persist(any(Equipment.class));
     }
     
     @Test
-    void testReserveStock_InsufficientStock() {
-        // テスト実装
+    void testCreateEquipmentFromProduct_NotRentalEligible() {
+        // Given
+        ProductCreatedEvent event = new ProductCreatedEvent(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "WAX-TEST-001",
+            "テストワックス",
+            "WAX",
+            "Swix",
+            "WAX",
+            new BigDecimal("2000"),
+            null,
+            null,
+            "テスト用ワックス",
+            null,
+            false,
+            LocalDateTime.now()
+        );
+        
+        // When
+        Equipment result = equipmentService.createEquipmentFromProduct(event);
+        
+        // Then
+        assertThat(result).isNull();
+        verify(entityManager, never()).persist(any(Equipment.class));
     }
 }
 ```
 
 ### 統合テスト
 
-- **データベース連携テスト**: Testcontainersを使用したPostgreSQL連携テスト
-- **メッセージング連携テスト**: Apache Kafka連携テスト
-- **API統合テスト**: RESTAssuredを使用したAPI テスト
-
-### 性能テスト
-
-- **同時実行テスト**: 複数ユーザーによる同時在庫予約テスト
-- **大量データテスト**: 大量在庫データでの性能検証
-- **負荷テスト**: JMeterを使用した負荷テスト
+```java
+@QuarkusTest
+@TestTransaction
+class ProductEventConsumerIntegrationTest {
+    
+    @Inject
+    ProductEventConsumer eventConsumer;
+    
+    @Inject
+    EquipmentService equipmentService;
+    
+    @Test
+    void testHandleProductCreatedEvent() {
+        // Given
+        ProductCreatedEvent event = createTestProductEvent();
+        Message<ProductEvent> message = Message.of(event);
+        
+        // When
+        CompletionStage<Void> result = eventConsumer.handleProductEvent(message);
+        
+        // Then
+        result.toCompletableFuture().join();
+        
+        Equipment equipment = equipmentService.findByProductId(event.getProductId());
+        assertThat(equipment).isNotNull();
+        assertThat(equipment.getCachedSku()).isEqualTo(event.getSku());
+    }
+    
+    private ProductCreatedEvent createTestProductEvent() {
+        return new ProductCreatedEvent(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "SKI-INTEGRATION-001",
+            "統合テストスキー",
+            "SKI_BOARD",
+            "Atomic",
+            "SKI_BOARD",
+            new BigDecimal("60000"),
+            "170cm",
+            "ADVANCED",
+            "統合テスト用",
+            null,
+            true,
+            LocalDateTime.now()
+        );
+    }
+}
+```
 
 ## ローカル開発環境 {#local-development}
 
@@ -1906,40 +1447,126 @@ class InventoryServiceTest {
 # docker-compose.yml
 version: '3.8'
 services:
-  postgres:
-    image: postgres:16
+  inventory-management-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
     environment:
-      POSTGRES_DB: inventory_db
-      POSTGRES_USER: inventory_user
-      POSTGRES_PASSWORD: inventory_pass
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/inventory_db
+      - DATABASE_USER=inventory_user
+      - DATABASE_PASSWORD=inventory_pass
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - postgres
+      - kafka
+    networks:
+      - ski-shop-network
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=inventory_db
+      - POSTGRES_USER=inventory_user
+      - POSTGRES_PASSWORD=inventory_pass
     ports:
-      - "5432:5432"
-  
-  redis:
-    image: redis:7.2
-    ports:
-      - "6379:6379"
-  
+      - "5435:5432"
+    volumes:
+      - postgres_inventory_data:/var/lib/postgresql/data
+      - ./setup_inventory_db.sh:/docker-entrypoint-initdb.d/setup_inventory_db.sh
+    networks:
+      - ski-shop-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - ski-shop-network
+
   kafka:
     image: confluentinc/cp-kafka:latest
-    environment:
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+    depends_on:
+      - zookeeper
     ports:
-      - "9092:9092"
+      - "9093:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    networks:
+      - ski-shop-network
+
+volumes:
+  postgres_inventory_data:
+
+networks:
+  ski-shop-network:
+    driver: bridge
 ```
 
-### 開発用設定
+### アプリケーション設定
 
-```properties
-# application-dev.properties
-quarkus.datasource.url=jdbc:postgresql://localhost:5432/inventory_db
-quarkus.datasource.username=inventory_user
-quarkus.datasource.password=inventory_pass
+```yaml
+# application.yml
+quarkus:
+  application:
+    name: inventory-management-service
+  
+  http:
+    port: 8084
+  
+  datasource:
+    db-kind: postgresql
+    jdbc:
+      url: ${DATABASE_URL:jdbc:postgresql://localhost:5435/inventory_db}
+    username: ${DATABASE_USER:inventory_user}
+    password: ${DATABASE_PASSWORD:inventory_pass}
+  
+  hibernate-orm:
+    database:
+      generation: update
+    sql-load-script: import.sql
 
-quarkus.redis.uri=redis://localhost:6379
+# Kafka設定
+mp:
+  messaging:
+    incoming:
+      product-events:
+        connector: smallrye-kafka
+        topic: product-events
+        value:
+          deserializer: io.quarkus.kafka.client.serialization.JsonbDeserializer
+        key:
+          deserializer: org.apache.kafka.common.serialization.StringDeserializer
+        auto-offset-reset: earliest
+        group-id: inventory-management-service
 
-kafka.bootstrap.servers=localhost:9092
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+```
+
+### 開発用データ投入
+
+```sql
+-- import.sql
+-- サンプル設備データ
+INSERT INTO equipment (id, product_id, cached_sku, cached_name, cached_category, cached_brand, cached_equipment_type, cached_base_price, daily_rate, is_rental_available, is_active, cache_updated_at, created_at, updated_at) VALUES
+(1, 'p1234567-89ab-cdef-0123-456789abcdef', 'SKI-ROSS-HERO-165', 'Rossignol Hero Athlete FIS GS', 'SKI_BOARD', 'Rossignol', 'SKI_BOARD', 120000.00, 14400.00, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, 'p2234567-89ab-cdef-0123-456789abcdef', 'SKI-ATOM-REDSTER-170', 'Atomic Redster X9 WC GS', 'SKI_BOARD', 'Atomic', 'SKI_BOARD', 110000.00, 13200.00, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 'p3234567-89ab-cdef-0123-456789abcdef', 'SKI-SAL-SMAX-160', 'Salomon S/Max 8', 'SKI_BOARD', 'Salomon', 'SKI_BOARD', 45000.00, 5400.00, true, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- サンプル在庫アイテム
+INSERT INTO inventory_items (id, equipment_id, serial_number, status, location, size, condition_rating, total_rental_count, created_at, updated_at) VALUES
+(1, 1, 'SKI001-001', 'AVAILABLE', 'MAIN_STORE', '165cm', 5, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, 1, 'SKI001-002', 'AVAILABLE', 'MAIN_STORE', '165cm', 5, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 2, 'SKI002-001', 'RENTED', 'MAIN_STORE', '170cm', 4, 5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(4, 3, 'SKI003-001', 'AVAILABLE', 'RENTAL_COUNTER', '160cm', 5, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 ```
 
 ## 本番デプロイメント {#production-deployment}
@@ -1950,89 +1577,96 @@ kafka.bootstrap.servers=localhost:9092
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inventory-service
+  name: inventory-management-service
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: inventory-service
+      app: inventory-management-service
   template:
     metadata:
       labels:
-        app: inventory-service
+        app: inventory-management-service
     spec:
       containers:
-      - name: inventory-service
-        image: ski-shop/inventory-service:latest
+      - name: inventory-management-service
+        image: ski-shop/inventory-management-service:latest
         ports:
-        - containerPort: 8080
+        - containerPort: 8084
         env:
-        - name: POSTGRES_HOST
-          value: "postgres-service"
-        - name: REDIS_HOST
-          value: "redis-service"
+        - name: DATABASE_URL
+          value: "jdbc:postgresql://postgres-service:5432/inventory_db"
         - name: KAFKA_BOOTSTRAP_SERVERS
           value: "kafka-service:9092"
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8084
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8084
 ```
-
-### 本番環境設定
-
-- **データベース接続**: 本番PostgreSQL クラスター設定
-- **キャッシュ設定**: Redis Cluster設定
-- **メッセージング設定**: Kafka クラスター設定
-- **モニタリング設定**: Prometheus/Grafana設定
 
 ## 監視・運用 {#monitoring-operations}
 
-### メトリクス監視
+### ヘルスチェック
 
 ```java
-@Counted(name = "inventory_reservations_total", description = "Total inventory reservations")
-@Timed(name = "inventory_reservation_duration", description = "Inventory reservation processing time")
-public InventoryResult reserveStock(ReservationRequest request) {
-    // 在庫予約処理
+@ApplicationScoped
+public class InventoryHealthCheck implements HealthCheck {
+    
+    @Override
+    public HealthCheckResponse call() {
+        HealthCheckResponseBuilder builder = HealthCheckResponse.named("inventory-management-service");
+        
+        try {
+            // データベース接続確認
+            // Kafka接続確認
+            // Event Consumer状態確認
+            
+            builder.up()
+                .withData("kafka-consumer", "healthy")
+                .withData("database", "connected");
+        } catch (Exception e) {
+            builder.down().withData("error", e.getMessage());
+        }
+        
+        return builder.build();
+    }
 }
 ```
 
-### アラート設定
+### メトリクス
 
-- **在庫切れアラート**: 在庫レベルが0になった場合
-- **低在庫アラート**: 在庫レベルが設定閾値を下回った場合
-- **システムエラーアラート**: アプリケーションエラー発生時
-- **性能劣化アラート**: レスポンス時間が閾値を超過した場合
+```java
+@ApplicationScoped
+public class InventoryMetrics {
+    
+    @Inject
+    @Metric(name = "equipment_created_total")
+    Counter equipmentCreated;
+    
+    @Inject
+    @Metric(name = "product_events_processed_total")
+    Counter eventsProcessed;
+    
+    @Inject
+    @Metric(name = "rental_rate_calculations_total")
+    Counter rateCalculations;
+    
+    public void recordEquipmentCreated() {
+        equipmentCreated.increment();
+    }
+    
+    public void recordEventProcessed() {
+        eventsProcessed.increment();
+    }
+    
+    public void recordRateCalculation() {
+        rateCalculations.increment();
+    }
+}
+```
 
-### ダッシュボード
-
-- **在庫レベル監視**: リアルタイム在庫状況表示
-- **在庫移動履歴**: 在庫変動の時系列表示
-- **予約状況監視**: アクティブな予約の一覧表示
-- **システム性能**: API レスポンス時間、スループット監視
-
-## 障害対応 {#incident-response}
-
-### 障害対応手順
-
-#### レベル1: 軽微な障害
-
-- **対象**: 個別API エラー、一時的な性能劣化
-- **対応時間**: 1時間以内
-- **対応手順**: ログ確認、自動復旧監視
-
-#### レベル2: 中程度の障害
-
-- **対象**: 在庫データ不整合、予約処理エラー
-- **対応時間**: 30分以内
-- **対応手順**: データ整合性チェック、手動修正
-
-#### レベル3: 重大な障害
-
-- **対象**: システム全体停止、データ損失
-- **対応時間**: 15分以内
-- **対応手順**: 緊急復旧、バックアップ復元
-
-### 災害復旧計画
-
-- **バックアップ戦略**: 日次フルバックアップ、時間単位増分バックアップ
-- **復旧手順**: 自動フェイルオーバー、手動切り戻し手順
-- **データ復旧**: PostgreSQL PITR、Redis AOF復旧
-- **テスト計画**: 月次災害復旧テスト実施
+このInventory Management Serviceの詳細設計書により、Event-Driven Architectureを活用した効率的なレンタル設備管理システムの実装が可能です。Product Catalog Serviceとの連携により、データの一貫性を保ちながら、レンタル業務に特化した機能を提供します。
