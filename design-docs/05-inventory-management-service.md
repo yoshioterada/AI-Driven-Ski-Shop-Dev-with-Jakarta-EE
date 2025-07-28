@@ -4,39 +4,40 @@
 
 1. [概要](#概要)
 2. [技術仕様](#技術仕様)
-3. [アーキテクチャ設計](#アーキテクチャ設計)
-4. [API設計](#api設計)
-5. [データベース設計](#データベース設計)
-6. [在庫管理設計](#inventory-management-design)
-7. [在庫追跡設計](#inventory-tracking-design)
-8. [エラー処理](#error-handling)
-9. [テスト設計](#test-design)
-10. [ローカル開発環境](#local-development)
-11. [本番デプロイメント](#production-deployment)
-12. [監視・運用](#monitoring-operations)
-13. [障害対応](#incident-response)
+3. [Event-Driven Architecture](#event-driven-architecture)
+4. [アーキテクチャ設計](#アーキテクチャ設計)
+5. [Equipment管理設計](#equipment-management-design)
+6. [API設計](#api設計)
+7. [データベース設計](#データベース設計)
+8. [レンタル管理設計](#rental-management-design)
+9. [エラー処理](#error-handling)
+10. [テスト設計](#test-design)
+11. [ローカル開発環境](#local-development)
+12. [本番デプロイメント](#production-deployment)
+13. [監視・運用](#monitoring-operations)
 
 ## 概要
 
 ### サービス概要
 
-Inventory Management Serviceは、スキー用品販売ショップサイトの在庫管理機能を担当するマイクロサービスです。在庫の追跡、予約、更新、補充、および在庫レベルの監視など、在庫に関する全ての機能を提供します。
+Inventory Management Serviceは、スキー用品レンタルショップの設備在庫管理を担当するマイクロサービスです。Product Catalog Serviceからのイベントを消費して、レンタル用設備情報をキャッシュし、在庫管理、予約管理、レンタル業務に特化した機能を提供します。
 
 ### 主要責務
 
-- **在庫管理**: 商品在庫数の管理、更新、追跡
-- **在庫予約**: 注文時の在庫引当、予約管理
-- **在庫補充**: 自動補充、発注点管理
-- **在庫監視**: 在庫レベル監視、アラート送信
-- **在庫履歴**: 在庫変動履歴、監査ログ
-- **倉庫管理**: 複数倉庫での在庫管理
+- **Event消費**: Product Catalog Serviceからの商品イベント処理
+- **Equipment管理**: レンタル用設備情報のキャッシュ管理
+- **レンタル料金計算**: 商品タイプ別の動的料金算出
+- **在庫管理**: レンタル可能設備の在庫追跡
+- **予約管理**: レンタル予約の管理と状態制御
+- **データ移行**: 段階的な旧システムからの移行サポート
 
 ### ビジネス価値
 
-- **販売機会最大化**: 適切な在庫レベルの維持
-- **コスト最適化**: 過剰在庫・欠品の防止
-- **顧客満足度向上**: 正確な在庫情報の提供
-- **運用効率化**: 自動化された在庫管理
+- **データ分離**: 商品データはProduct Catalogに一元化、レンタル特化機能に集中
+- **レンタル最適化**: 設備タイプ別の最適な料金設定とビジネスロジック
+- **リアルタイム同期**: Event-Driven Architectureによる即座の商品情報同期
+- **段階的移行**: 既存システムから新アーキテクチャへの無停止移行
+- **運用効率化**: レンタル業務に特化した管理画面と機能
 
 ## 技術仕様
 
@@ -47,32 +48,167 @@ Inventory Management Serviceは、スキー用品販売ショップサイトの�
 | **Runtime** | OpenJDK | 21 LTS | Java実行環境 |
 | **Framework** | Jakarta EE | 11 | エンタープライズフレームワーク |
 | **Application Server** | WildFly | 31.0.1 | Jakarta EEアプリケーションサーバー |
-| **Persistence** | Jakarta Persistence (JPA) | 3.2 | ORM |
-| **Data Access** | Jakarta Data | 1.0 | Repository抽象化 |
-| **REST API** | Jakarta REST (JAX-RS) | 4.0 | RESTful Web Services |
-| **CDI** | Jakarta CDI | 4.1 | 依存性注入・管理 |
-| **Validation** | Jakarta Validation | 3.1 | Bean Validation |
-| **JSON Processing** | Jakarta JSON-P | 2.1 | JSON処理 |
-| **Database** | PostgreSQL | 16 | 主データベース |
-| **Cache** | Redis | 7.2 | 在庫キャッシュ |
-| **Message Queue** | Apache Kafka | 3.7 | 在庫イベント処理 |
-| **Time Series DB** | InfluxDB | 2.7 | 在庫履歴データ |
-| **Monitoring** | MicroProfile Metrics | 5.1 | メトリクス収集 |
-| **Tracing** | MicroProfile OpenTelemetry | 2.0 | 分散トレーシング |
+| **Persistence** | Hibernate ORM | 6.4 | ORM |
+| **Data Access** | JPA | 3.2 | データアクセス |
+| **REST API** | JAX-RS | 4.0 | RESTful Web Services |
+| **CDI** | Weld | 5.1 | 依存性注入・管理 |
+| **Validation** | Hibernate Validator | 8.0 | Bean Validation |
+| **JSON Processing** | Jackson | 2.16 | JSON処理 |
+| **Database** | PostgreSQL | 16 | 設備・在庫データベース |
+| **Message Queue** | Apache Kafka | 3.7 | Event-Driven Architecture |
+| **Reactive Messaging** | SmallRye Reactive Messaging | 4.15 | Kafka統合 |
 | **Health Check** | MicroProfile Health | 4.0 | ヘルスチェック |
 | **Configuration** | MicroProfile Config | 3.1 | 設定管理 |
+| **Metrics** | MicroProfile Metrics | 5.1 | メトリクス収集 |
 
 ### 除外技術
 
-- **Lombok**: Jakarta EE 11のRecord クラスとモダンJava機能を活用するため使用しません
+- **Redis**: キャッシュ機能はJPA level 2 cacheで代替
+- **InfluxDB**: 履歴データはPostgreSQLで管理
 
 ### Java 21 LTS 活用機能
 
-- **Virtual Threads**: 高並行在庫処理
-- **Record Classes**: 在庫データ構造
-- **Pattern Matching**: 在庫状態判定
-- **Text Blocks**: 複雑なSQL定義
-- **Sealed Classes**: 在庫イベントの型安全性
+- **Virtual Threads**: 高い並行性を持つイベント処理とレンタル処理
+- **Record Classes**: 設備データ転送オブジェクトとイベントクラス
+- **Pattern Matching**: 設備タイプ別の料金計算ロジック
+- **Text Blocks**: 複雑なSQL定義とJSONテンプレート
+- **Sealed Classes**: イベントタイプとレンタル状態の型安全性
+
+## Event-Driven Architecture
+
+### アーキテクチャ概要
+
+Inventory Management Serviceは、Product Catalog ServiceからのイベントをリアルタイムでConsumeし、レンタル用設備情報をキャッシュ管理する Event Consumer として機能します。
+
+```mermaid
+graph LR
+    subgraph "Product Catalog Service"
+        PC[Product Service]
+        PE[Product Event Publisher]
+    end
+    
+    subgraph "Apache Kafka"
+        TOPIC[product-events Topic]
+    end
+    
+    subgraph "Inventory Management Service"
+        PEC[Product Event Consumer]
+        ES[Equipment Service]
+        EQ[Equipment Entity]
+    end
+    
+    PC --> PE
+    PE --> TOPIC
+    TOPIC --> PEC
+    PEC --> ES
+    ES --> EQ
+```
+
+### イベント消費設計
+
+#### Event Consumer実装
+
+```java
+@ApplicationScoped
+public class ProductEventConsumer {
+    
+    @Inject
+    Logger logger;
+    
+    @Inject
+    EquipmentService equipmentService;
+    
+    @Incoming("product-events")
+    public CompletionStage<Void> handleProductEvent(Message<ProductEvent> message) {
+        ProductEvent event = message.getPayload();
+        
+        logger.info("Received product event: " + event.getEventType() + 
+                   " for product: " + event.getAggregateId());
+        
+        try {
+            switch (event.getEventType()) {
+                case "PRODUCT_CREATED":
+                    handleProductCreated((ProductCreatedEvent) event);
+                    break;
+                case "PRODUCT_UPDATED":
+                    handleProductUpdated((ProductUpdatedEvent) event);
+                    break;
+                case "PRODUCT_DELETED":
+                    handleProductDeleted((ProductDeletedEvent) event);
+                    break;
+                case "PRODUCT_ACTIVATED":
+                    handleProductActivated((ProductActivatedEvent) event);
+                    break;
+                case "PRODUCT_DEACTIVATED":
+                    handleProductDeactivated((ProductDeactivatedEvent) event);
+                    break;
+                default:
+                    logger.warning("Unknown product event type: " + event.getEventType());
+            }
+            
+            logger.info("Successfully processed product event: " + event.getEventId());
+            return message.ack();
+            
+        } catch (Exception e) {
+            logger.severe("Failed to process product event: " + event.getEventId() + 
+                         ", error: " + e.getMessage());
+            return message.nack(e);
+        }
+    }
+    
+    private void handleProductCreated(ProductCreatedEvent event) {
+        if (isRentalEligible(event)) {
+            equipmentService.createEquipmentFromProduct(event);
+            logger.info("Created equipment for product: " + event.getProductId());
+        } else {
+            logger.info("Product not eligible for rental, skipping: " + event.getProductId());
+        }
+    }
+    
+    private void handleProductUpdated(ProductUpdatedEvent event) {
+        equipmentService.updateEquipmentFromProduct(event);
+        logger.info("Updated equipment cache for product: " + event.getProductId());
+    }
+    
+    private void handleProductDeleted(ProductDeletedEvent event) {
+        equipmentService.deactivateEquipment(event.getProductId());
+        logger.info("Deactivated equipment for deleted product: " + event.getProductId());
+    }
+    
+    private void handleProductActivated(ProductActivatedEvent event) {
+        equipmentService.activateEquipment(event.getProductId());
+        logger.info("Activated equipment for product: " + event.getProductId());
+    }
+    
+    private void handleProductDeactivated(ProductDeactivatedEvent event) {
+        equipmentService.deactivateEquipment(event.getProductId());
+        logger.info("Deactivated equipment for product: " + event.getProductId());
+    }
+    
+    /**
+     * レンタル対象商品の判定ロジック
+     */
+    private boolean isRentalEligible(ProductCreatedEvent event) {
+        return event.isRentalAvailable() && 
+               !"WAX".equals(event.getEquipmentType()) && 
+               !"TUNING".equals(event.getEquipmentType());
+    }
+}
+```
+
+### イベント処理戦略
+
+#### 1. 冪等性保証
+
+同じイベントが複数回処理されても結果が同じになるよう、イベントIDベースの処理済みチェックを実装。
+
+#### 2. エラーハンドリング
+
+処理失敗時には、Dead Letter Queue パターンを使用して手動での復旧を可能にします。
+
+#### 3. Graceful Degradation
+
+Product Catalog Serviceが停止していても、キャッシュされた設備情報でレンタル業務を継続可能。
 
 ## アーキテクチャ設計
 
@@ -82,1122 +218,371 @@ Inventory Management Serviceは、スキー用品販売ショップサイトの�
 graph TB
     subgraph "External Clients"
         WEB[Web Frontend]
-        MOBILE[Mobile App]
+        ADMIN[Admin Portal]
         API_CLIENT[API Client]
-        ADMIN[Admin Dashboard]
-    end
-    
-    subgraph "API Gateway Layer"
-        GATEWAY[API Gateway]
     end
     
     subgraph "Inventory Management Service"
-        INVENTORY_CTRL[Inventory Controller]
-        STOCK_SERVICE[Stock Service]
+        REST[REST Controller]
+        EQUIPMENT_SERVICE[Equipment Service]
+        INVENTORY_SERVICE[Inventory Service]
         RESERVATION_SERVICE[Reservation Service]
-        REPLENISHMENT_SERVICE[Replenishment Service]
-        WAREHOUSE_SERVICE[Warehouse Service]
-        TRACKING_SERVICE[Tracking Service]
+        EVENT_CONSUMER[Product Event Consumer]
+        MIGRATION_SERVICE[Data Migration Service]
     end
     
     subgraph "Data Layer"
         POSTGRES[(PostgreSQL)]
-        REDIS[(Redis Cache)]
-        INFLUXDB[(InfluxDB)]
-        KAFKA[Kafka Topics]
     end
     
-    subgraph "External Services"
-        PRODUCT_SERVICE[Product Service]
-        ORDER_SERVICE[Order Service]
-        SUPPLIER_SERVICE[Supplier Service]
-        NOTIFICATION_SERVICE[Notification Service]
+    subgraph "Event Infrastructure"
+        KAFKA[Apache Kafka]
+        PRODUCT_TOPIC[product-events Topic]
     end
     
-    WEB --> GATEWAY
-    MOBILE --> GATEWAY
-    API_CLIENT --> GATEWAY
-    ADMIN --> GATEWAY
+    subgraph "Upstream Services"
+        PRODUCT_CATALOG[Product Catalog Service]
+    end
     
-    GATEWAY --> INVENTORY_CTRL
+    WEB --> REST
+    ADMIN --> REST
+    API_CLIENT --> REST
     
-    INVENTORY_CTRL --> STOCK_SERVICE
-    INVENTORY_CTRL --> RESERVATION_SERVICE
-    INVENTORY_CTRL --> REPLENISHMENT_SERVICE
-    INVENTORY_CTRL --> WAREHOUSE_SERVICE
-    INVENTORY_CTRL --> TRACKING_SERVICE
+    REST --> EQUIPMENT_SERVICE
+    REST --> INVENTORY_SERVICE
+    REST --> RESERVATION_SERVICE
     
-    STOCK_SERVICE --> POSTGRES
+    EQUIPMENT_SERVICE --> POSTGRES
+    INVENTORY_SERVICE --> POSTGRES
     RESERVATION_SERVICE --> POSTGRES
-    REPLENISHMENT_SERVICE --> POSTGRES
-    WAREHOUSE_SERVICE --> POSTGRES
     
-    STOCK_SERVICE --> REDIS
-    RESERVATION_SERVICE --> REDIS
+    PRODUCT_CATALOG --> KAFKA
+    KAFKA --> PRODUCT_TOPIC
+    PRODUCT_TOPIC --> EVENT_CONSUMER
     
-    TRACKING_SERVICE --> INFLUXDB
-    
-    INVENTORY_CTRL --> KAFKA
-    
-    INVENTORY_CTRL --> PRODUCT_SERVICE
-    INVENTORY_CTRL --> ORDER_SERVICE
-    INVENTORY_CTRL --> SUPPLIER_SERVICE
-    INVENTORY_CTRL --> NOTIFICATION_SERVICE
+    EVENT_CONSUMER --> EQUIPMENT_SERVICE
+    MIGRATION_SERVICE --> EQUIPMENT_SERVICE
 ```
 
-### ドメインモデル設計
+## Equipment管理設計 {#equipment-management-design}
+
+### Equipment エンティティ設計
 
 ```java
-// 在庫アイテム
 @Entity
-@Table(name = "inventory_items")
-public class InventoryItem {
+@Table(name = "equipment")
+@NamedQueries({
+    @NamedQuery(
+        name = "Equipment.findByProductId",
+        query = "SELECT e FROM Equipment e WHERE e.productId = :productId"
+    ),
+    @NamedQuery(
+        name = "Equipment.findBySku",
+        query = "SELECT e FROM Equipment e WHERE e.cachedSku = :sku"
+    ),
+    @NamedQuery(
+        name = "Equipment.findRentalAvailable",
+        query = "SELECT e FROM Equipment e WHERE e.isRentalAvailable = true AND e.isActive = true"
+    )
+})
+public class Equipment {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "equipment_seq")
+    @SequenceGenerator(name = "equipment_seq", sequenceName = "equipment_id_seq", allocationSize = 1)
+    private Long id;
     
+    @NotNull
     @Column(name = "product_id", nullable = false)
     private UUID productId;
     
-    @Column(name = "sku", unique = true, nullable = false)
+    // 段階的移行のための旧フィールド（将来削除予定）
+    @Column(name = "sku", length = 100)
     private String sku;
     
-    @Column(name = "warehouse_id", nullable = false)
-    private UUID warehouseId;
+    @Column(name = "name", length = 200)
+    private String name;
     
-    @Column(name = "available_quantity", nullable = false)
-    private Integer availableQuantity;
+    @Column(name = "category", length = 100)
+    private String category;
     
-    @Column(name = "reserved_quantity", nullable = false)
-    private Integer reservedQuantity = 0;
+    @Column(name = "brand", length = 100)
+    private String brand;
     
-    @Column(name = "incoming_quantity", nullable = false)
-    private Integer incomingQuantity = 0;
+    @Column(name = "equipment_type", length = 50)
+    private String equipmentType;
     
-    @Column(name = "minimum_stock_level", nullable = false)
-    private Integer minimumStockLevel;
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
     
-    @Column(name = "maximum_stock_level", nullable = false)
-    private Integer maximumStockLevel;
+    // ビジネス固有フィールド
+    @NotNull
+    @Column(name = "daily_rate", precision = 10, scale = 2, nullable = false)
+    private BigDecimal dailyRate;
     
-    @Column(name = "reorder_point", nullable = false)
-    private Integer reorderPoint;
+    @Column(name = "is_rental_available", nullable = false)
+    private boolean isRentalAvailable = true;
     
-    @Column(name = "reorder_quantity", nullable = false)
-    private Integer reorderQuantity;
+    @Column(name = "is_active", nullable = false)
+    private boolean isActive = true;
     
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    private InventoryStatus status;
+    // キャッシュフィールド（Product Catalog Serviceから同期）
+    @Column(name = "cached_sku", length = 100)
+    private String cachedSku;
     
-    @Column(name = "last_updated_at", nullable = false)
-    private LocalDateTime lastUpdatedAt;
+    @Column(name = "cached_name", length = 200)
+    private String cachedName;
     
+    @Column(name = "cached_category", length = 100)
+    private String cachedCategory;
+    
+    @Column(name = "cached_brand", length = 100)
+    private String cachedBrand;
+    
+    @Column(name = "cached_equipment_type", length = 50)
+    private String cachedEquipmentType;
+    
+    @Column(name = "cached_base_price", precision = 10, scale = 2)
+    private BigDecimal cachedBasePrice;
+    
+    @Column(name = "cached_description", columnDefinition = "TEXT")
+    private String cachedDescription;
+    
+    @Column(name = "cache_updated_at", nullable = false)
+    private LocalDateTime cacheUpdatedAt;
+    
+    // タイムスタンプ
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
     
-    // 関連エンティティ
-    @OneToMany(mappedBy = "inventoryItem", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<StockMovement> stockMovements = new ArrayList<>();
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
     
-    @OneToMany(mappedBy = "inventoryItem", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<StockReservation> reservations = new ArrayList<>();
-    
-    // ビジネスロジック
-    public Integer getTotalQuantity() {
-        return availableQuantity + reservedQuantity;
+    // ライフサイクルコールバック
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        this.cacheUpdatedAt = LocalDateTime.now();
     }
     
-    public boolean isLowStock() {
-        return availableQuantity <= reorderPoint;
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
     
-    public boolean isOutOfStock() {
-        return availableQuantity <= 0;
-    }
+    // ビジネスメソッド
     
-    public boolean canReserve(Integer quantity) {
-        return availableQuantity >= quantity;
-    }
-    
-    public void reserveStock(Integer quantity) {
-        if (!canReserve(quantity)) {
-            throw new InsufficientStockException("在庫不足です");
+    /**
+     * レンタル料金を計算（商品タイプに応じた計算）
+     */
+    public static BigDecimal calculateDailyRate(BigDecimal basePrice, String equipmentType) {
+        if (basePrice == null) {
+            return BigDecimal.ZERO;
         }
-        this.availableQuantity -= quantity;
-        this.reservedQuantity += quantity;
-        this.lastUpdatedAt = LocalDateTime.now();
+        
+        BigDecimal rate = basePrice.multiply(BigDecimal.valueOf(0.1)); // 基本10%
+        
+        return switch (equipmentType) {
+            case "SKI_BOARD" -> rate.multiply(BigDecimal.valueOf(1.2)); // 20%増し
+            case "BOOT" -> rate.multiply(BigDecimal.valueOf(1.1)); // 10%増し
+            case "HELMET" -> rate.multiply(BigDecimal.valueOf(0.8)); // 20%減
+            case "POLE" -> rate.multiply(BigDecimal.valueOf(0.6)); // 40%減
+            case "GOGGLE" -> rate.multiply(BigDecimal.valueOf(0.5)); // 50%減
+            case "GLOVE" -> rate.multiply(BigDecimal.valueOf(0.4)); // 60%減
+            default -> rate;
+        };
     }
     
-    public void releaseReservation(Integer quantity) {
-        this.reservedQuantity = Math.max(0, this.reservedQuantity - quantity);
-        this.availableQuantity += quantity;
-        this.lastUpdatedAt = LocalDateTime.now();
+    /**
+     * レンタル対象商品かどうか判定
+     */
+    public static boolean isRentalEligible(String equipmentType) {
+        return !"WAX".equals(equipmentType) && !"TUNING".equals(equipmentType);
     }
     
-    public void confirmReservation(Integer quantity) {
-        this.reservedQuantity = Math.max(0, this.reservedQuantity - quantity);
-        this.lastUpdatedAt = LocalDateTime.now();
-    }
+    // Getter and Setter methods...
 }
+```
 
-// 在庫予約
-@Entity
-@Table(name = "stock_reservations")
-public class StockReservation {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "inventory_item_id", nullable = false)
-    private InventoryItem inventoryItem;
-    
-    @Column(name = "order_id")
-    private UUID orderId;
-    
-    @Column(name = "customer_id")
-    private UUID customerId;
-    
-    @Column(name = "reserved_quantity", nullable = false)
-    private Integer reservedQuantity;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false)
-    private ReservationStatus status;
-    
-    @Column(name = "expires_at", nullable = false)
-    private LocalDateTime expiresAt;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-    
-    @Column(name = "confirmed_at")
-    private LocalDateTime confirmedAt;
-    
-    public boolean isExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
-    }
-    
-    public boolean canConfirm() {
-        return status == ReservationStatus.ACTIVE && !isExpired();
-    }
-}
+### Equipment Service設計
 
-// 在庫移動履歴
-@Entity
-@Table(name = "stock_movements")
-public class StockMovement {
+```java
+@ApplicationScoped
+@Transactional
+public class EquipmentService {
     
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @Inject
+    Logger logger;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "inventory_item_id", nullable = false)
-    private InventoryItem inventoryItem;
+    @PersistenceContext
+    EntityManager entityManager;
     
-    @Enumerated(EnumType.STRING)
-    @Column(name = "movement_type", nullable = false)
-    private MovementType movementType;
-    
-    @Column(name = "quantity", nullable = false)
-    private Integer quantity;
-    
-    @Column(name = "reference_id")
-    private UUID referenceId;
-    
-    @Column(name = "reference_type")
-    private String referenceType;
-    
-    @Column(name = "reason")
-    private String reason;
-    
-    @Column(name = "notes")
-    private String notes;
-    
-    @Column(name = "created_by")
-    private UUID createdBy;
-    
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-}
-
-// Record ベース Value Objects
-public record StockLevel(
-    Integer available,
-    Integer reserved,
-    Integer incoming,
-    Integer total
-) {
-    public static StockLevel from(InventoryItem item) {
-        return new StockLevel(
-            item.getAvailableQuantity(),
-            item.getReservedQuantity(),
-            item.getIncomingQuantity(),
-            item.getTotalQuantity()
+    /**
+     * Product Created イベントからEquipment作成
+     */
+    public Equipment createEquipmentFromProduct(ProductCreatedEvent event) {
+        // レンタル対象チェック
+        if (!Equipment.isRentalEligible(event.getEquipmentType())) {
+            logger.info("Product not eligible for rental: " + event.getProductId());
+            return null;
+        }
+        
+        Equipment equipment = new Equipment();
+        equipment.setProductId(event.getProductId());
+        
+        // キャッシュフィールドに新しいデータを設定
+        equipment.setCachedSku(event.getSku());
+        equipment.setCachedName(event.getName());
+        equipment.setCachedCategory(event.getCategory());
+        equipment.setCachedBrand(event.getBrand());
+        equipment.setCachedEquipmentType(event.getEquipmentType());
+        equipment.setCachedBasePrice(event.getBasePrice());
+        equipment.setCachedDescription(event.getDescription());
+        
+        // ビジネスロジック：料金計算
+        BigDecimal dailyRate = Equipment.calculateDailyRate(
+            event.getBasePrice(), 
+            event.getEquipmentType()
         );
+        equipment.setDailyRate(dailyRate);
+        equipment.setRentalAvailable(event.isRentalAvailable());
+        
+        entityManager.persist(equipment);
+        
+        logger.info("Created equipment for product: " + event.getProductId() + 
+                   ", daily rate: " + dailyRate);
+        
+        return equipment;
     }
     
-    public boolean isLow(Integer reorderPoint) {
-        return available <= reorderPoint;
+    /**
+     * Product Updated イベントからEquipment更新
+     */
+    public Equipment updateEquipmentFromProduct(ProductUpdatedEvent event) {
+        Equipment equipment = findByProductId(event.getProductId());
+        if (equipment == null) {
+            logger.warning("Equipment not found for product: " + event.getProductId());
+            return null;
+        }
+        
+        // キャッシュフィールドを更新
+        equipment.setCachedSku(event.getSku());
+        equipment.setCachedName(event.getName());
+        equipment.setCachedCategory(event.getCategory());
+        equipment.setCachedBrand(event.getBrand());
+        equipment.setCachedEquipmentType(event.getEquipmentType());
+        equipment.setCachedBasePrice(event.getBasePrice());
+        equipment.setCachedDescription(event.getDescription());
+        equipment.setCacheUpdatedAt(LocalDateTime.now());
+        
+        // 料金再計算
+        BigDecimal newDailyRate = Equipment.calculateDailyRate(
+            event.getBasePrice(), 
+            event.getEquipmentType()
+        );
+        equipment.setDailyRate(newDailyRate);
+        
+        entityManager.merge(equipment);
+        
+        logger.info("Updated equipment cache for product: " + event.getProductId());
+        
+        return equipment;
     }
     
-    public boolean isOutOfStock() {
-        return available <= 0;
-    }
-}
-
-public record ReorderInfo(
-    Integer reorderPoint,
-    Integer reorderQuantity,
-    Integer minimumLevel,
-    Integer maximumLevel,
-    boolean autoReorder
-) {
-    public boolean shouldReorder(Integer currentLevel) {
-        return currentLevel <= reorderPoint;
-    }
-}
-
-public record WarehouseInfo(
-    UUID warehouseId,
-    String warehouseName,
-    String location,
-    boolean isActive
-) {}
-
-// Sealed Classes for Events
-public sealed interface InventoryEvent
-    permits StockUpdatedEvent, StockReservedEvent, StockConfirmedEvent, 
-            LowStockEvent, OutOfStockEvent, ReorderTriggeredEvent {
-}
-
-public record StockUpdatedEvent(
-    UUID inventoryItemId,
-    String sku,
-    Integer previousQuantity,
-    Integer newQuantity,
-    MovementType movementType,
-    String reason,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-public record StockReservedEvent(
-    UUID reservationId,
-    UUID inventoryItemId,
-    String sku,
-    Integer quantity,
-    UUID orderId,
-    LocalDateTime expiresAt,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-public record LowStockEvent(
-    UUID inventoryItemId,
-    String sku,
-    Integer currentQuantity,
-    Integer reorderPoint,
-    LocalDateTime timestamp
-) implements InventoryEvent {}
-
-// Enums
-public enum InventoryStatus {
-    ACTIVE("有効"),
-    INACTIVE("無効"),
-    DISCONTINUED("生産終了");
-    
-    private final String description;
-    
-    InventoryStatus(String description) {
-        this.description = description;
+    /**
+     * Equipment検索（Product IDによる）
+     */
+    public Equipment findByProductId(UUID productId) {
+        TypedQuery<Equipment> query = entityManager.createNamedQuery(
+            "Equipment.findByProductId", Equipment.class);
+        query.setParameter("productId", productId);
+        
+        try {
+            return query.getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
     }
     
-    public String getDescription() {
-        return description;
-    }
-}
-
-public enum ReservationStatus {
-    ACTIVE("有効"),
-    CONFIRMED("確定"),
-    CANCELLED("取消"),
-    EXPIRED("期限切れ");
-    
-    private final String description;
-    
-    ReservationStatus(String description) {
-        this.description = description;
+    /**
+     * Equipment検索（SKUによる）
+     */
+    public Equipment findBySku(String sku) {
+        TypedQuery<Equipment> query = entityManager.createNamedQuery(
+            "Equipment.findBySku", Equipment.class);
+        query.setParameter("sku", sku);
+        
+        try {
+            return query.getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
     }
     
-    public String getDescription() {
-        return description;
-    }
-}
-
-public enum MovementType {
-    INBOUND("入荷"),
-    OUTBOUND("出荷"),
-    ADJUSTMENT("調整"),
-    TRANSFER("移動"),
-    RETURN("返品"),
-    DAMAGE("損傷"),
-    THEFT("紛失");
-    
-    private final String description;
-    
-    MovementType(String description) {
-        this.description = description;
+    /**
+     * レンタル可能な設備一覧取得
+     */
+    public List<Equipment> findRentalAvailable() {
+        TypedQuery<Equipment> query = entityManager.createNamedQuery(
+            "Equipment.findRentalAvailable", Equipment.class);
+        return query.getResultList();
     }
     
-    public String getDescription() {
-        return description;
+    /**
+     * Equipment非アクティブ化
+     */
+    public void deactivateEquipment(UUID productId) {
+        Equipment equipment = findByProductId(productId);
+        if (equipment != null) {
+            equipment.setActive(false);
+            equipment.setRentalAvailable(false);
+            entityManager.merge(equipment);
+            
+            logger.info("Deactivated equipment for product: " + productId);
+        }
+    }
+    
+    /**
+     * Equipmentアクティブ化
+     */
+    public void activateEquipment(UUID productId) {
+        Equipment equipment = findByProductId(productId);
+        if (equipment != null) {
+            equipment.setActive(true);
+            equipment.setRentalAvailable(true);
+            entityManager.merge(equipment);
+            
+            logger.info("Activated equipment for product: " + productId);
+        }
     }
 }
 ```
 
-### サービス層設計
+### レンタル料金計算ロジック
+
+Equipment管理の核心機能として、商品タイプ別の動的料金計算を実装：
+
+#### 料金計算戦略
+
+1. **基本料金**: Product Catalog Serviceからの basePrice * 10%
+2. **設備タイプ別係数**:
+   - SKI_BOARD (スキー板): 1.2倍 (高需要・高価値)
+   - BOOT (ブーツ): 1.1倍 (必需品)
+   - HELMET (ヘルメット): 0.8倍 (安全促進価格)
+   - POLE (ストック): 0.6倍 (低価格設定)
+   - GOGGLE (ゴーグル): 0.5倍 (アクセサリー価格)
+   - GLOVE (グローブ): 0.4倍 (低価格設定)
+
+#### 計算例
 
 ```java
-// 在庫サービス (CQRS Pattern 対応)
-@ApplicationScoped
-@Transactional
-public class InventoryService {
-    
-    private static final Logger logger = LoggerFactory.getLogger(InventoryService.class);
-    
-    @Inject
-    private InventoryItemRepository inventoryRepository;
-    
-    @Inject
-    private StockMovementRepository movementRepository;
-    
-    @Inject
-    private InventoryEventPublisher eventPublisher;
-    
-    @Inject
-    private InventoryCacheService cacheService;
-    
-    @Inject
-    private InventoryProcessingSaga inventoryProcessingSaga;
-    
-    // CQRS Command Handlers
-    @CommandHandler
-    public InventoryResult handle(ReserveInventoryCommand command) {
-        try {
-            var reservationId = UUID.randomUUID();
-            var result = reserveStock(command.sku(), command.quantity(), 
-                command.orderId(), command.customerId(), reservationId);
-            
-            if (result.success()) {
-                eventPublisher.publish(new InventoryReservedEvent(
-                    command.orderId(),
-                    command.sku(),
-                    command.quantity(),
-                    reservationId,
-                    LocalDateTime.now()
-                ));
-                
-                logger.info("在庫予約完了: SKU={}, quantity={}, orderId={}, reservationId={}", 
-                    command.sku(), command.quantity(), command.orderId(), reservationId);
-            }
-            
-            return result;
-        } catch (Exception e) {
-            logger.error("在庫予約エラー: SKU=" + command.sku(), e);
-            eventPublisher.publish(new InventoryReservationFailedEvent(
-                command.orderId(),
-                command.sku(),
-                command.quantity(),
-                e.getMessage(),
-                LocalDateTime.now()
-            ));
-            
-            return new InventoryResult(false, null, e.getMessage());
-        }
-    }
-    
-    @CommandHandler
-    public InventoryResult handle(ReleaseInventoryCommand command) {
-        try {
-            var result = releaseReservation(command.reservationId(), command.reason());
-            
-            if (result.success()) {
-                eventPublisher.publish(new InventoryReleasedEvent(
-                    command.orderId(),
-                    command.reservationId(),
-                    command.reason(),
-                    LocalDateTime.now()
-                ));
-                
-                logger.info("在庫予約解除完了: reservationId={}, orderId={}", 
-                    command.reservationId(), command.orderId());
-            }
-            
-            return result;
-        } catch (Exception e) {
-            logger.error("在庫予約解除エラー: reservationId=" + command.reservationId(), e);
-            return new InventoryResult(false, null, e.getMessage());
-        }
-    }
-    
-    @CommandHandler
-    public InventoryResult handle(ConfirmInventoryCommand command) {
-        try {
-            var result = confirmReservation(command.reservationId());
-            
-            if (result.success()) {
-                eventPublisher.publish(new InventoryConfirmedEvent(
-                    command.orderId(),
-                    command.reservationId(),
-                    LocalDateTime.now()
-                ));
-                
-                logger.info("在庫確定完了: reservationId={}, orderId={}", 
-                    command.reservationId(), command.orderId());
-            }
-            
-            return result;
-        } catch (Exception e) {
-            logger.error("在庫確定エラー: reservationId=" + command.reservationId(), e);
-            return new InventoryResult(false, null, e.getMessage());
-        }
-    }
-    
-    @CommandHandler
-    public InventoryResult handle(AdjustInventoryCommand command) {
-        try {
-            var result = adjustStock(command.sku(), command.newQuantity(), command.reason());
-            
-            if (result.success()) {
-                eventPublisher.publish(new InventoryAdjustedEvent(
-                    command.sku(),
-                    command.previousQuantity(),
-                    command.newQuantity(),
-                    command.reason(),
-                    LocalDateTime.now()
-                ));
-                
-                logger.info("在庫調整完了: SKU={}, oldQuantity={}, newQuantity={}", 
-                    command.sku(), command.previousQuantity(), command.newQuantity());
-            }
-            
-            return result;
-        } catch (Exception e) {
-            logger.error("在庫調整エラー: SKU=" + command.sku(), e);
-            return new InventoryResult(false, null, e.getMessage());
-        }
-    }
-    
-    // CQRS Query Handlers
-    @QueryHandler
-    public InventoryProjection handle(GetInventoryBySkuQuery query) {
-        var item = findBySku(query.sku());
-        return item.map(InventoryProjection::from)
-            .orElse(null);
-    }
-    
-    @QueryHandler
-    public List<InventoryProjection> handle(GetLowStockItemsQuery query) {
-        return inventoryRepository.findLowStockItems(query.threshold())
-            .stream()
-            .map(InventoryProjection::from)
-            .toList();
-    }
-    
-    @QueryHandler
-    public List<StockMovementProjection> handle(GetStockMovementHistoryQuery query) {
-        return movementRepository.findBySkuAndDateRange(
-                query.sku(), query.fromDate(), query.toDate())
-            .stream()
-            .map(StockMovementProjection::from)
-            .toList();
-    }
-    
-    @QueryHandler
-    public InventoryStatisticsProjection handle(GetInventoryStatisticsQuery query) {
-        var totalItems = inventoryRepository.countAll();
-        var lowStockItems = inventoryRepository.countLowStockItems(query.lowStockThreshold());
-        var outOfStockItems = inventoryRepository.countOutOfStockItems();
-        var totalValue = inventoryRepository.calculateTotalValue();
-        
-        return new InventoryStatisticsProjection(
-            totalItems,
-            lowStockItems,
-            outOfStockItems,
-            totalValue,
-            LocalDateTime.now()
-        );
-    }
-    
-    // Event Handlers
-    @EventHandler
-    public void handle(OrderCreatedEvent event) {
-        logger.info("注文作成イベント処理開始: orderId={}", event.orderId());
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                inventoryProcessingSaga.processOrderInventoryReservation(
-                    event.orderId(),
-                    event.orderItems()
-                );
-            } catch (Exception e) {
-                logger.error("在庫予約Saga実行エラー: orderId=" + event.orderId(), e);
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    @EventHandler
-    public void handle(OrderCancelledEvent event) {
-        logger.info("注文キャンセルイベント処理開始: orderId={}", event.orderId());
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                inventoryProcessingSaga.processOrderInventoryRelease(
-                    event.orderId(),
-                    event.reason()
-                );
-            } catch (Exception e) {
-                logger.error("在庫解除Saga実行エラー: orderId=" + event.orderId(), e);
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    public Optional<InventoryItem> findBySku(String sku) {
-        // キャッシュから取得を試行
-        var cached = cacheService.getInventoryItem(sku);
-        if (cached.isPresent()) {
-            return cached;
-        }
-        
-        // データベースから取得
-        var item = inventoryRepository.findBySku(sku);
-        if (item.isPresent()) {
-            cacheService.cacheInventoryItem(item.get());
-        }
-        
-        return item;
-    }
-    
-    public StockLevel getStockLevel(String sku) {
-        var item = findBySku(sku)
-            .orElseThrow(() -> new InventoryNotFoundException("SKU not found: " + sku));
-        
-        return StockLevel.from(item);
-    }
-    
-    public void updateStock(String sku, Integer quantity, MovementType movementType, String reason) {
-        var item = findBySku(sku)
-            .orElseThrow(() -> new InventoryNotFoundException("SKU not found: " + sku));
-        
-        var previousQuantity = item.getAvailableQuantity();
-        
-        // 在庫更新
-        switch (movementType) {
-            case INBOUND -> item.setAvailableQuantity(item.getAvailableQuantity() + quantity);
-            case OUTBOUND -> {
-                if (item.getAvailableQuantity() < quantity) {
-                    throw new InsufficientStockException("在庫不足です");
-                }
-                item.setAvailableQuantity(item.getAvailableQuantity() - quantity);
-            }
-            case ADJUSTMENT -> item.setAvailableQuantity(quantity);
-            default -> throw new UnsupportedOperationException("未対応の移動タイプ: " + movementType);
-        }
-        
-        item.setLastUpdatedAt(LocalDateTime.now());
-        
-        // 在庫移動履歴記録
-        var movement = new StockMovement();
-        movement.setInventoryItem(item);
-        movement.setMovementType(movementType);
-        movement.setQuantity(quantity);
-        movement.setReason(reason);
-        movement.setCreatedAt(LocalDateTime.now());
-        
-        movementRepository.save(movement);
-        inventoryRepository.save(item);
-        
-        // キャッシュ更新
-        cacheService.updateInventoryItem(item);
-        
-        // イベント発行
-        eventPublisher.publish(new StockUpdatedEvent(
-            item.getId(),
-            item.getSku(),
-            previousQuantity,
-            item.getAvailableQuantity(),
-            movementType,
-            reason,
-            LocalDateTime.now()
-        ));
-        
-        // 低在庫チェック
-        checkLowStock(item);
-        
-        logger.info("Stock updated for SKU: {}, Movement: {}, Quantity: {}", 
-            sku, movementType, quantity);
-    }
-    
-    private void checkLowStock(InventoryItem item) {
-        if (item.isLowStock()) {
-            eventPublisher.publish(new LowStockEvent(
-                item.getId(),
-                item.getSku(),
-                item.getAvailableQuantity(),
-                item.getReorderPoint(),
-                LocalDateTime.now()
-            ));
-        }
-        
-        if (item.isOutOfStock()) {
-            eventPublisher.publish(new OutOfStockEvent(
-                item.getId(),
-                item.getSku(),
-                LocalDateTime.now()
-            ));
-        }
-    }
-    
-    public List<InventoryItem> findLowStockItems() {
-        return inventoryRepository.findLowStockItems();
-    }
-    
-    public List<InventoryItem> findByWarehouse(UUID warehouseId) {
-        return inventoryRepository.findByWarehouseId(warehouseId);
-    }
-    
-    public InventoryStatistics getInventoryStatistics() {
-        var totalItems = inventoryRepository.count();
-        var lowStockCount = inventoryRepository.countLowStockItems();
-        var outOfStockCount = inventoryRepository.countOutOfStockItems();
-        var totalValue = inventoryRepository.calculateTotalInventoryValue();
-        
-        return new InventoryStatistics(
-            totalItems,
-            lowStockCount,
-            outOfStockCount,
-            totalValue
-        );
-    }
-}
+// 例: ベース価格 50,000円のスキー板
+BigDecimal basePrice = new BigDecimal("50000");
+String equipmentType = "SKI_BOARD";
 
-// 在庫処理Sagaパターン
-@ApplicationScoped
-@Transactional
-public class InventoryProcessingSaga {
-    
-    private static final Logger logger = LoggerFactory.getLogger(InventoryProcessingSaga.class);
-    
-    @Inject
-    private InventoryItemRepository inventoryRepository;
-    
-    @Inject
-    private StockReservationRepository reservationRepository;
-    
-    @Inject
-    private SagaStateRepository sagaStateRepository;
-    
-    @Inject
-    private InventoryEventPublisher eventPublisher;
-    
-    public CompletableFuture<SagaResult> processOrderInventoryReservation(
-            UUID orderId, List<OrderItemDto> orderItems) {
-        
-        return CompletableFuture.supplyAsync(() -> {
-            var sagaId = UUID.randomUUID();
-            var sagaState = new SagaState(sagaId, orderId, SagaType.INVENTORY_RESERVATION);
-            sagaStateRepository.save(sagaState);
-            
-            try {
-                logger.info("在庫予約Saga開始: sagaId={}, orderId={}", sagaId, orderId);
-                sagaState.setCurrentStep("VALIDATING_INVENTORY");
-                
-                // Step 1: 在庫チェック
-                var validationResult = validateInventoryAvailability(orderItems);
-                if (!validationResult.success()) {
-                    return handleSagaFailure(sagaState, "在庫チェック失敗", validationResult.message());
-                }
-                sagaState.setLastCompletedStep("VALIDATING_INVENTORY");
-                
-                // Step 2: 在庫予約
-                sagaState.setCurrentStep("RESERVING_INVENTORY");
-                var reservationResult = reserveInventoryItems(orderId, orderItems);
-                if (!reservationResult.success()) {
-                    return handleSagaFailure(sagaState, "在庫予約失敗", reservationResult.message());
-                }
-                sagaState.setLastCompletedStep("RESERVING_INVENTORY");
-                
-                // Step 3: 予約確認イベント送信
-                sagaState.setCurrentStep("PUBLISHING_EVENTS");
-                publishInventoryReservedEvents(orderId, orderItems, reservationResult.reservationIds());
-                sagaState.setLastCompletedStep("PUBLISHING_EVENTS");
-                
-                // Saga完了
-                sagaState.complete();
-                sagaStateRepository.save(sagaState);
-                
-                logger.info("在庫予約Saga完了: sagaId={}, orderId={}", sagaId, orderId);
-                return new SagaResult(true, "在庫予約完了");
-                
-            } catch (Exception e) {
-                logger.error("在庫予約Saga実行エラー: sagaId=" + sagaId, e);
-                return handleSagaFailure(sagaState, "予期しないエラー", e.getMessage());
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    public CompletableFuture<SagaResult> processOrderInventoryRelease(
-            UUID orderId, String reason) {
-        
-        return CompletableFuture.supplyAsync(() -> {
-            var sagaId = UUID.randomUUID();
-            var sagaState = new SagaState(sagaId, orderId, SagaType.INVENTORY_RELEASE);
-            sagaStateRepository.save(sagaState);
-            
-            try {
-                logger.info("在庫解除Saga開始: sagaId={}, orderId={}", sagaId, orderId);
-                
-                // Step 1: 予約検索
-                sagaState.setCurrentStep("FINDING_RESERVATIONS");
-                var reservations = reservationRepository.findByOrderId(orderId);
-                if (reservations.isEmpty()) {
-                    logger.warn("予約が見つかりません: orderId={}", orderId);
-                    sagaState.complete();
-                    sagaStateRepository.save(sagaState);
-                    return new SagaResult(true, "予約なし - 処理完了");
-                }
-                sagaState.setLastCompletedStep("FINDING_RESERVATIONS");
-                
-                // Step 2: 予約解除
-                sagaState.setCurrentStep("RELEASING_RESERVATIONS");
-                var releaseResult = releaseInventoryReservations(reservations, reason);
-                if (!releaseResult.success()) {
-                    return handleSagaFailure(sagaState, "予約解除失敗", releaseResult.message());
-                }
-                sagaState.setLastCompletedStep("RELEASING_RESERVATIONS");
-                
-                // Step 3: 解除イベント送信
-                sagaState.setCurrentStep("PUBLISHING_EVENTS");
-                publishInventoryReleasedEvents(orderId, reservations, reason);
-                sagaState.setLastCompletedStep("PUBLISHING_EVENTS");
-                
-                // Saga完了
-                sagaState.complete();
-                sagaStateRepository.save(sagaState);
-                
-                logger.info("在庫解除Saga完了: sagaId={}, orderId={}", sagaId, orderId);
-                return new SagaResult(true, "在庫解除完了");
-                
-            } catch (Exception e) {
-                logger.error("在庫解除Saga実行エラー: sagaId=" + sagaId, e);
-                return handleSagaFailure(sagaState, "予期しないエラー", e.getMessage());
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    // Saga補償処理
-    public CompletableFuture<SagaResult> compensateInventoryReservation(UUID sagaId) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                var sagaState = sagaStateRepository.findById(sagaId)
-                    .orElseThrow(() -> new IllegalArgumentException("Saga not found: " + sagaId));
-                
-                logger.info("在庫予約補償開始: sagaId={}, orderId={}", sagaId, sagaState.getOrderId());
-                sagaState.setStatus(SagaStatus.COMPENSATING);
-                
-                var lastCompletedStep = sagaState.getLastCompletedStep();
-                
-                // 逆順で補償実行
-                if ("PUBLISHING_EVENTS".equals(lastCompletedStep)) {
-                    // イベント補償は通常不要（冪等性によりハンドリング）
-                }
-                
-                if ("RESERVING_INVENTORY".equals(lastCompletedStep) || 
-                    "PUBLISHING_EVENTS".equals(lastCompletedStep)) {
-                    // 在庫予約解除
-                    var reservations = reservationRepository.findByOrderId(sagaState.getOrderId());
-                    if (!reservations.isEmpty()) {
-                        releaseInventoryReservations(reservations, "Saga補償による解除");
-                        logger.info("在庫予約補償完了: sagaId={}", sagaId);
-                    }
-                }
-                
-                sagaState.setStatus(SagaStatus.COMPENSATED);
-                sagaStateRepository.save(sagaState);
-                
-                return new SagaResult(true, "補償完了");
-                
-            } catch (Exception e) {
-                logger.error("在庫予約補償エラー: sagaId=" + sagaId, e);
-                return new SagaResult(false, "補償失敗: " + e.getMessage());
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    // プライベートヘルパーメソッド
-    private SagaStepResult validateInventoryAvailability(List<OrderItemDto> orderItems) {
-        for (var item : orderItems) {
-            var inventoryItem = inventoryRepository.findBySku(item.sku());
-            if (inventoryItem.isEmpty()) {
-                return new SagaStepResult(false, "商品が見つかりません: " + item.sku());
-            }
-            
-            if (!inventoryItem.get().canReserve(item.quantity())) {
-                return new SagaStepResult(false, "在庫不足です: " + item.sku());
-            }
-        }
-        
-        return new SagaStepResult(true, "在庫チェック完了");
-    }
-    
-    private InventoryReservationResult reserveInventoryItems(UUID orderId, List<OrderItemDto> orderItems) {
-        var reservationIds = new ArrayList<UUID>();
-        
-        try {
-            for (var item : orderItems) {
-                var inventoryItem = inventoryRepository.findBySku(item.sku())
-                    .orElseThrow(() -> new InventoryNotFoundException("SKU not found: " + item.sku()));
-                
-                // 在庫予約実行
-                inventoryItem.reserveStock(item.quantity());
-                inventoryRepository.save(inventoryItem);
-                
-                // 予約レコード作成
-                var reservation = new StockReservation();
-                reservation.setInventoryItem(inventoryItem);
-                reservation.setOrderId(orderId);
-                reservation.setQuantity(item.quantity());
-                reservation.setStatus(ReservationStatus.RESERVED);
-                reservation.setCreatedAt(LocalDateTime.now());
-                reservation.setExpiresAt(LocalDateTime.now().plusMinutes(30));
-                
-                reservationRepository.save(reservation);
-                reservationIds.add(reservation.getId());
-            }
-            
-            return new InventoryReservationResult(true, reservationIds, "予約完了");
-            
-        } catch (Exception e) {
-            // 部分的予約の場合はロールバック
-            rollbackPartialReservations(reservationIds);
-            return new InventoryReservationResult(false, Collections.emptyList(), e.getMessage());
-        }
-    }
-    
-    private SagaStepResult releaseInventoryReservations(List<StockReservation> reservations, String reason) {
-        try {
-            for (var reservation : reservations) {
-                if (reservation.getStatus() == ReservationStatus.RESERVED) {
-                    var inventoryItem = reservation.getInventoryItem();
-                    inventoryItem.releaseReservation(reservation.getQuantity());
-                    inventoryRepository.save(inventoryItem);
-                    
-                    reservation.setStatus(ReservationStatus.RELEASED);
-                    reservation.setReleasedAt(LocalDateTime.now());
-                    reservation.setReleaseReason(reason);
-                    reservationRepository.save(reservation);
-                }
-            }
-            
-            return new SagaStepResult(true, "予約解除完了");
-            
-        } catch (Exception e) {
-            return new SagaStepResult(false, "予約解除エラー: " + e.getMessage());
-        }
-    }
-    
-    private void publishInventoryReservedEvents(UUID orderId, List<OrderItemDto> orderItems, 
-            List<UUID> reservationIds) {
-        
-        for (int i = 0; i < orderItems.size(); i++) {
-            var item = orderItems.get(i);
-            var reservationId = i < reservationIds.size() ? reservationIds.get(i) : null;
-            
-            eventPublisher.publish(new InventoryReservedEvent(
-                orderId,
-                item.sku(),
-                item.quantity(),
-                reservationId,
-                LocalDateTime.now()
-            ));
-        }
-    }
-    
-    private void publishInventoryReleasedEvents(UUID orderId, List<StockReservation> reservations, 
-            String reason) {
-        
-        for (var reservation : reservations) {
-            eventPublisher.publish(new InventoryReleasedEvent(
-                orderId,
-                reservation.getId(),
-                reason,
-                LocalDateTime.now()
-            ));
-        }
-    }
-    
-    private void rollbackPartialReservations(List<UUID> reservationIds) {
-        for (var reservationId : reservationIds) {
-            try {
-                var reservation = reservationRepository.findById(reservationId);
-                if (reservation.isPresent()) {
-                    var inventoryItem = reservation.get().getInventoryItem();
-                    inventoryItem.releaseReservation(reservation.get().getQuantity());
-                    inventoryRepository.save(inventoryItem);
-                    
-                    reservationRepository.delete(reservation.get());
-                }
-            } catch (Exception e) {
-                logger.error("予約ロールバックエラー: reservationId=" + reservationId, e);
-            }
-        }
-    }
-    
-    private SagaResult handleSagaFailure(SagaState sagaState, String reason, String message) {
-        sagaState.fail(reason + ": " + message);
-        sagaStateRepository.save(sagaState);
-        
-        // 補償処理を非同期で実行
-        CompletableFuture.runAsync(() -> {
-            try {
-                compensateInventoryReservation(sagaState.getId()).get();
-            } catch (Exception e) {
-                logger.error("Saga補償処理エラー: sagaId=" + sagaState.getId(), e);
-            }
-        }, VirtualThread.ofVirtual().factory());
-        
-        return new SagaResult(false, reason + ": " + message);
-    }
-}
-
-// 在庫予約サービス
-@ApplicationScoped
-@Transactional
-public class StockReservationService {
-    
-    private static final Logger logger = LoggerFactory.getLogger(StockReservationService.class);
-    
-    @Inject
-    private InventoryService inventoryService;
-    
-    @Inject
-    private StockReservationRepository reservationRepository;
-    
-    @Inject
-    private InventoryEventPublisher eventPublisher;
-    
-    @ConfigProperty(name = "reservation.default.expiration", defaultValue = "PT30M")
-    private Duration defaultReservationDuration;
-    
-    public StockReservation reserveStock(ReservationRequest request) {
-        var item = inventoryService.findBySku(request.sku())
-            .orElseThrow(() -> new InventoryNotFoundException("SKU not found: " + request.sku()));
-        
-        if (!item.canReserve(request.quantity())) {
-            throw new InsufficientStockException("在庫不足です: " + request.sku());
-        }
-        
-        // 在庫予約
-        item.reserveStock(request.quantity());
-        
-        var reservation = new StockReservation();
-        reservation.setInventoryItem(item);
-        reservation.setOrderId(request.orderId());
-        reservation.setCustomerId(request.customerId());
-        reservation.setReservedQuantity(request.quantity());
-        reservation.setStatus(ReservationStatus.ACTIVE);
-        reservation.setExpiresAt(LocalDateTime.now().plus(defaultReservationDuration));
-        reservation.setCreatedAt(LocalDateTime.now());
-        
-        reservationRepository.save(reservation);
-        
-        // イベント発行
-        eventPublisher.publish(new StockReservedEvent(
-            reservation.getId(),
-            item.getId(),
-            item.getSku(),
-            request.quantity(),
-            request.orderId(),
-            reservation.getExpiresAt(),
-            LocalDateTime.now()
-        ));
-        
-        logger.info("Stock reserved: SKU={}, Quantity={}, OrderId={}", 
-            request.sku(), request.quantity(), request.orderId());
-        
-        return reservation;
-    }
-    
-    public void confirmReservation(UUID reservationId) {
-        var reservation = reservationRepository.findById(reservationId)
-            .orElseThrow(() -> new ReservationNotFoundException("Reservation not found: " + reservationId));
-        
-        if (!reservation.canConfirm()) {
-            throw new InvalidReservationStateException("予約を確定できません");
-        }
-        
-        var item = reservation.getInventoryItem();
-        item.confirmReservation(reservation.getReservedQuantity());
-        
-        reservation.setStatus(ReservationStatus.CONFIRMED);
-        reservation.setConfirmedAt(LocalDateTime.now());
-        
-        reservationRepository.save(reservation);
-        
-        // イベント発行
-        eventPublisher.publish(new StockConfirmedEvent(
-            reservation.getId(),
-            item.getId(),
-            item.getSku(),
-            reservation.getReservedQuantity(),
-            reservation.getOrderId(),
-            LocalDateTime.now()
-        ));
-        
-        logger.info("Reservation confirmed: ReservationId={}, SKU={}", 
-            reservationId, item.getSku());
-    }
-    
-    public void cancelReservation(UUID reservationId, String reason) {
-        var reservation = reservationRepository.findById(reservationId)
-            .orElseThrow(() -> new ReservationNotFoundException("Reservation not found: " + reservationId));
-        
-        if (reservation.getStatus() != ReservationStatus.ACTIVE) {
-            throw new InvalidReservationStateException("予約をキャンセルできません");
-        }
-        
-        var item = reservation.getInventoryItem();
-        item.releaseReservation(reservation.getReservedQuantity());
-        
-        reservation.setStatus(ReservationStatus.CANCELLED);
-        
-        reservationRepository.save(reservation);
-        
-        logger.info("Reservation cancelled: ReservationId={}, Reason={}", 
-            reservationId, reason);
-    }
-    
-    // 期限切れ予約の自動キャンセル
-    @Schedule(every = "PT5M") // 5分ごと
-    public void cleanupExpiredReservations() {
-        var expiredReservations = reservationRepository.findExpiredReservations();
-        
-        for (var reservation : expiredReservations) {
-            try {
-                cancelReservation(reservation.getId(), "期限切れによる自動キャンセル");
-            } catch (Exception e) {
-                logger.error("Failed to cancel expired reservation: {}", reservation.getId(), e);
-            }
-        }
-        
-        if (!expiredReservations.isEmpty()) {
-            logger.info("Cleaned up {} expired reservations", expiredReservations.size());
-        }
-    }
-}
+BigDecimal dailyRate = Equipment.calculateDailyRate(basePrice, equipmentType);
+// 結果: 50,000 * 0.1 * 1.2 = 6,000円/日
 ```
 
 ## API設計
