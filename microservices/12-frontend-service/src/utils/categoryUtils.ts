@@ -90,6 +90,13 @@ export const getCategoryFilterUrl = (category: Category) => {
 };
 
 /**
+ * CategoryInfoオブジェクトから商品一覧ページのURLを生成
+ */
+export const getCategoryInfoFilterUrl = (categoryInfo: CategoryInfo) => {
+  return `/products?category=${encodeURIComponent(categoryInfo.path)}`;
+};
+
+/**
  * メインカテゴリに属するすべてのサブカテゴリのIDを取得する
  */
 export const getSubCategoryIds = (mainCategory: Category, subCategories: Category[]): string[] => {

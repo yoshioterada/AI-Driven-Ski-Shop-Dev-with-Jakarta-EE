@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useCartStore } from '@/stores/cartStore';
 import type { Product } from '@/types/product';
-import { getCategoryHierarchy, getCategoryFilterUrl, CategoryInfo } from '@/utils/categoryUtils';
+import { getCategoryHierarchy, getCategoryInfoFilterUrl, CategoryInfo } from '@/utils/categoryUtils';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -187,7 +187,7 @@ export default function ProductDetailPage() {
             <>
               <span>/</span>
               <Link 
-                href={getCategoryFilterUrl(categoryHierarchy.mainCategory.slug)} 
+                href={getCategoryInfoFilterUrl(categoryHierarchy.mainCategory)} 
                 className="hover:text-blue-600"
               >
                 {categoryHierarchy.mainCategory.name}
@@ -198,7 +198,7 @@ export default function ProductDetailPage() {
             <>
               <span>/</span>
               <Link 
-                href={getCategoryFilterUrl(categoryHierarchy.subCategory.slug)} 
+                href={getCategoryInfoFilterUrl(categoryHierarchy.subCategory)} 
                 className="hover:text-blue-600"
               >
                 {categoryHierarchy.subCategory.name}
@@ -313,7 +313,7 @@ export default function ProductDetailPage() {
                   <span className="text-3xl font-bold text-gray-900">
                     ¥{product.price.toLocaleString()}
                   </span>
-                  {product.originalPrice > product.price && (
+                  {product.originalPrice && product.originalPrice > product.price && (
                     <>
                       <span className="text-lg text-gray-500 line-through">
                         ¥{product.originalPrice.toLocaleString()}
