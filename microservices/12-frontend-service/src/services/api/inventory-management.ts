@@ -65,7 +65,7 @@ class InventoryManagementHttpClient {
       },
       (error) => {
         console.error('[InventoryManagement] Request error:', error);
-        return Promise.reject(new Error('Request failed'));
+        return Promise.reject(error);
       }
     );
 
