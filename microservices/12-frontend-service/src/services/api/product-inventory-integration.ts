@@ -175,7 +175,7 @@ export class ProductInventoryIntegrationApi {
     const results = new Map<string, { data: InventoryItemResponse; error?: string }>();
     
     // 並行処理で在庫データを取得（最大同時リクエスト数を制限）
-    const BATCH_SIZE = 10; // 同時リクエスト数の制限
+    const BATCH_SIZE = 20; // 同時リクエスト数の制限
     
     for (let i = 0; i < skus.length; i += BATCH_SIZE) {
       const batch = skus.slice(i, i + BATCH_SIZE);

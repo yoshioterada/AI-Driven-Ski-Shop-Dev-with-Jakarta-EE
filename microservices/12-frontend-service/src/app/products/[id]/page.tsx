@@ -199,11 +199,7 @@ export default function ProductDetailPage() {
             <>
               <span>/</span>
               <Link 
-                href={getCategoryInfoFilterUrl({
-                  id: categoryHierarchy.subCategory.id,
-                  name: categoryHierarchy.subCategory.name,
-                  description: categoryHierarchy.subCategory.description || '',
-                })} 
+                href={getCategoryInfoFilterUrl(categoryHierarchy.subCategory)} 
                 className="hover:text-blue-600"
               >
                 {categoryHierarchy.subCategory.name}
