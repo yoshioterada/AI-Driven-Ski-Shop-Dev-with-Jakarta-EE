@@ -5,15 +5,15 @@
 1. [概要](#概要)
 2. [技術仕様](#技術仕様)
 3. [アーキテクチャ設計](#アーキテクチャ設計)
-4. [API設計](#api設計)
-5. [データベース設計](#データベース設計)
-6. [検索・フィルタリング設計](#検索フィルタリング設計)
-7. [エラー処理](#エラー処理)
-8. [テスト設計](#テスト設計)
-9. [ローカル開発環境](#ローカル開発環境)
-10. [本番デプロイメント](#production-deployment)
-11. [監視・運用](#monitoring-operations)
-12. [障害対応](#incident-response)
+4. [Event-Driven Architecture](#event-driven-architecture)
+5. [API設計](#api設計)
+6. [データベース設計](#データベース設計)
+7. [商品管理設計](#product-management-design)
+8. [エラー処理](#エラー処理)
+9. [テスト設計](#テスト設計)
+10. [ローカル開発環境](#ローカル開発環境)
+11. [本番デプロイメント](#production-deployment)
+12. [監視・運用](#monitoring-operations)
 
 ## 概要
 
@@ -25,17 +25,18 @@ Product Catalog Serviceは、スキー用品販売ショップサイトの商品
 
 - **商品管理**: 商品情報の登録、更新、削除
 - **カテゴリ管理**: 商品カテゴリとブランドの階層管理
-- **検索機能**: 高速な商品検索とフィルタリング
-- **商品詳細**: 仕様、画像、レビュー情報の管理
-- **価格管理**: 価格履歴、セール価格の管理
-- **在庫連携**: 在庫サービスとの在庫状況同期
+- **Event Publishing**: 商品変更イベントの発行（Kafka）
+- **商品詳細**: 仕様、画像、価格情報の管理
+- **Single Source of Truth**: 商品データの統一的な管理
+- **サービス間連携**: Event-Driven Architectureによる他サービスとの連携
 
 ### ビジネス価値
 
-- **顧客体験向上**: 高速で正確な商品検索
-- **販売促進**: 効果的な商品カタログ表示
-- **運用効率化**: 商品情報の一元管理
-- **データ分析**: 商品パフォーマンス分析基盤
+- **データ整合性**: 商品データの単一情報源として一貫性を保証
+- **リアルタイム同期**: Event-Driven Architectureによる即座の変更通知
+- **サービス独立性**: 疎結合なアーキテクチャによる独立したデプロイと拡張
+- **運用効率化**: 商品情報の一元管理とイベントベースの自動化
+- **障害耐性**: 非同期イベント処理による可用性向上
 
 ## 技術仕様
 
@@ -44,35 +45,246 @@ Product Catalog Serviceは、スキー用品販売ショップサイトの商品
 | 技術領域 | 技術/ライブラリ | バージョン | 用途 |
 |---------|----------------|-----------|------|
 | **Runtime** | OpenJDK | 21 LTS | Java実行環境 |
-| **Framework** | Jakarta EE | 11 | エンタープライズフレームワーク |
-| **Application Server** | WildFly | 31.0.1 | Jakarta EEアプリケーションサーバー |
-| **Persistence** | Jakarta Persistence (JPA) | 3.2 | ORM |
-| **Data Access** | Jakarta Data | 1.0 | Repository抽象化 |
-| **REST API** | Jakarta REST (JAX-RS) | 4.0 | RESTful Web Services |
-| **CDI** | Jakarta CDI | 4.1 | 依存性注入・管理 |
-| **Validation** | Jakarta Validation | 3.1 | Bean Validation |
-| **JSON Processing** | Jakarta JSON-P | 2.1 | JSON処理 |
-| **Database** | PostgreSQL | 16 | 主データベース |
-| **Search Engine** | Elasticsearch | 8.11 | 全文検索・分析 |
-| **Cache** | Redis | 7.2 | キャッシュ |
-| **Message Queue** | Apache Kafka | 3.7 | 非同期イベント処理 |
-| **Image Processing** | ImageIO | Built-in | 画像処理 |
-| **Monitoring** | MicroProfile Metrics | 5.1 | メトリクス収集 |
-| **Tracing** | MicroProfile OpenTelemetry | 2.0 | 分散トレーシング |
+| **Framework** | Quarkus | 3.8.1 | マイクロサービスフレームワーク |
+| **Persistence** | Hibernate ORM | 6.4 | ORM |
+| **Data Access** | JPA | 3.2 | データアクセス |
+| **REST API** | RESTEasy | 6.2 | RESTful Web Services |
+| **CDI** | ArC (Quarkus CDI) | 3.8 | 依存性注入・管理 |
+| **Validation** | Hibernate Validator | 8.0 | Bean Validation |
+| **JSON Processing** | Jackson | 2.16 | JSON処理 |
+| **Database** | PostgreSQL | 16 | 商品データベース |
+| **Message Queue** | Apache Kafka | 3.7 | Event-Driven Architecture |
+| **Reactive Messaging** | SmallRye Reactive Messaging | 4.15 | Kafka統合 |
 | **Health Check** | MicroProfile Health | 4.0 | ヘルスチェック |
 | **Configuration** | MicroProfile Config | 3.1 | 設定管理 |
+| **Metrics** | MicroProfile Metrics | 5.1 | メトリクス収集 |
 
 ### 除外技術
 
-- **Lombok**: Jakarta EE 11のRecord クラスとモダンJava機能を活用するため使用しません
+- **Elasticsearch**: 検索機能は簡素化し、PostgreSQLベースの検索を採用
+- **Redis**: キャッシュ機能は他サービスで管理
 
 ### Java 21 LTS 活用機能
 
-- **Virtual Threads**: 大量の同時検索リクエスト処理
-- **Record Classes**: 商品データ転送オブジェクト
-- **Pattern Matching**: 商品フィルタリングロジック
-- **Text Blocks**: 複雑な検索クエリ定義
-- **Sealed Classes**: 商品タイプの型安全性
+- **Virtual Threads**: 高い並行性を持つイベント処理
+- **Record Classes**: 商品データ転送オブジェクトとイベントクラス
+- **Pattern Matching**: 商品タイプ別の処理分岐
+- **Text Blocks**: 複雑なSQL定義とJSONテンプレート
+- **Sealed Classes**: イベントタイプの型安全性
+
+## Event-Driven Architecture
+
+### アーキテクチャ概要
+
+Product Catalog Serviceは、Event-Driven Architectureの中核として機能し、商品データの単一情報源（Single Source of Truth）として他のマイクロサービスにリアルタイムで変更を通知します。
+
+```mermaid
+graph TB
+    subgraph "Product Catalog Service"
+        PC[Product Controller]
+        PS[Product Service]
+        PE[Product Event Publisher]
+    end
+    
+    subgraph "Apache Kafka"
+        TOPIC[product-events Topic]
+    end
+    
+    subgraph "Downstream Services"
+        IM[Inventory Management]
+        SC[Shopping Cart]
+        OS[Order Service]
+    end
+    
+    PC --> PS
+    PS --> PE
+    PE --> TOPIC
+    TOPIC --> IM
+    TOPIC --> SC
+    TOPIC --> OS
+```
+
+### イベント設計
+
+#### イベントタイプ
+
+```java
+public sealed interface ProductEvent 
+    permits ProductCreatedEvent, ProductUpdatedEvent, ProductDeletedEvent, 
+            ProductActivatedEvent, ProductDeactivatedEvent {
+    String getEventType();
+    UUID getAggregateId();
+    UUID getEventId();
+    LocalDateTime getEventTime();
+}
+```
+
+#### 商品作成イベント
+
+```java
+public record ProductCreatedEvent(
+    UUID eventId,
+    UUID productId,
+    String sku,
+    String name,
+    String category,
+    String brand,
+    String equipmentType,
+    BigDecimal basePrice,
+    String sizeRange,
+    String difficultyLevel,
+    String description,
+    String imageUrl,
+    boolean isRentalAvailable,
+    LocalDateTime eventTime
+) implements ProductEvent {
+    
+    public ProductCreatedEvent(Product product) {
+        this(
+            UUID.randomUUID(),
+            product.id,
+            product.sku,
+            product.name,
+            product.category,
+            product.brand,
+            product.equipmentType,
+            product.basePrice,
+            product.sizeRange,
+            product.difficultyLevel,
+            product.description,
+            product.imageUrl,
+            isRentalEligible(product.equipmentType),
+            LocalDateTime.now()
+        );
+    }
+    
+    @Override
+    public String getEventType() {
+        return "PRODUCT_CREATED";
+    }
+    
+    @Override
+    public UUID getAggregateId() {
+        return productId;
+    }
+    
+    private static boolean isRentalEligible(String equipmentType) {
+        return !"WAX".equals(equipmentType) && !"TUNING".equals(equipmentType);
+    }
+}
+```
+
+#### イベント発行サービス
+
+```java
+@ApplicationScoped
+public class ProductEventPublisher {
+    
+    @Channel("product-events-out")
+    Emitter<ProductEvent> eventEmitter;
+    
+    @Inject
+    Logger logger;
+    
+    public void publishProductCreated(Product product) {
+        ProductCreatedEvent event = new ProductCreatedEvent(product);
+        eventEmitter.send(event)
+            .whenComplete((success, failure) -> {
+                if (failure != null) {
+                    logger.error("Failed to publish product created event", failure);
+                } else {
+                    logger.info("Published product created event for: " + product.id);
+                }
+            });
+    }
+    
+    public void publishProductUpdated(Product oldProduct, Product newProduct) {
+        ProductUpdatedEvent event = new ProductUpdatedEvent(oldProduct, newProduct);
+        eventEmitter.send(event)
+            .whenComplete((success, failure) -> {
+                if (failure != null) {
+                    logger.error("Failed to publish product updated event", failure);
+                } else {
+                    logger.info("Published product updated event for: " + newProduct.id);
+                }
+            });
+    }
+    
+    // その他のイベント発行メソッド...
+}
+```
+
+### Kafka設定
+
+#### application.yml設定
+
+```yaml
+mp:
+  messaging:
+    outgoing:
+      product-events-out:
+        connector: smallrye-kafka
+        topic: product-events
+        value:
+          serializer: io.quarkus.kafka.client.serialization.JsonbSerializer
+        key:
+          serializer: org.apache.kafka.common.serialization.StringSerializer
+        acks: all
+        retries: 3
+        enable-idempotence: true
+
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+```
+
+### イベント発行戦略
+
+#### 1. トランザクション整合性
+
+商品データの永続化とイベント発行は、トランザクション境界内で実行され、データベースのコミット後にイベントが発行されることを保証します。
+
+```java
+@Transactional
+public Product createProduct(ProductCreateRequest request) {
+    // 1. 商品データをデータベースに永続化
+    Product product = new Product();
+    // ... 商品データ設定
+    Product savedProduct = productRepository.persist(product);
+    
+    // 2. 永続化成功後にイベント発行
+    productEventPublisher.publishProductCreated(savedProduct);
+    
+    return savedProduct;
+}
+```
+
+#### 2. 冪等性保証
+
+イベントにはユニークなイベントIDが付与され、下流サービスでの重複処理を防止します。
+
+#### 3. エラーハンドリング
+
+イベント発行失敗時には詳細なログが記録され、必要に応じて手動での再発行が可能です。
+
+### 下流サービスとの連携
+
+#### Inventory Management Service
+
+- **PRODUCT_CREATED**: レンタル対象商品の Equipment エンティティ作成
+- **PRODUCT_UPDATED**: キャッシュされた商品情報の更新
+- **PRODUCT_DELETED**: Equipment の非アクティブ化
+- **PRODUCT_ACTIVATED/DEACTIVATED**: レンタル可用性の更新
+
+#### Shopping Cart Service
+
+- **PRODUCT_UPDATED**: カート内商品情報の更新
+- **PRODUCT_DELETED**: カートからの商品削除
+- **PRODUCT_DEACTIVATED**: 購入不可能商品の通知
+
+### イベントストア（将来実装）
+
+現在はKafkaトピックでのイベント配信のみですが、将来的にはイベントソーシングパターンの実装も検討されています。
 
 ## アーキテクチャ設計
 
@@ -92,28 +304,24 @@ graph TB
     
     subgraph "Product Catalog Service"
         REST[REST Controller]
-        SEARCH[Search Service]
-        CATALOG[Catalog Service]
-        CATEGORY[Category Service]
-        IMAGE[Image Service]
-        PRICE[Price Service]
+        PRODUCT_SERVICE[Product Service]
+        CATEGORY_SERVICE[Category Service]
+        EVENT_PUBLISHER[Event Publisher]
     end
     
     subgraph "Data Layer"
         POSTGRES[(PostgreSQL)]
-        ELASTICSEARCH[(Elasticsearch)]
-        REDIS[(Redis Cache)]
-        KAFKA[Kafka Topics]
     end
     
-    subgraph "Storage"
-        BLOB[Azure Blob Storage]
-        CDN[Azure CDN]
+    subgraph "Event Infrastructure"
+        KAFKA[Apache Kafka]
+        TOPIC[product-events Topic]
     end
     
-    subgraph "External Services"
+    subgraph "Downstream Services"
         INVENTORY[Inventory Service]
-        REVIEW[Review Service]
+        CART[Shopping Cart]
+        ORDER[Order Service]
     end
     
     WEB --> GATEWAY
@@ -122,84 +330,71 @@ graph TB
     
     GATEWAY --> REST
     
-    REST --> SEARCH
-    REST --> CATALOG
-    REST --> CATEGORY
-    REST --> IMAGE
-    REST --> PRICE
+    REST --> PRODUCT_SERVICE
+    REST --> CATEGORY_SERVICE
     
-    SEARCH --> ELASTICSEARCH
-    CATALOG --> POSTGRES
-    CATEGORY --> POSTGRES
-    IMAGE --> BLOB
-    PRICE --> POSTGRES
+    PRODUCT_SERVICE --> POSTGRES
+    CATEGORY_SERVICE --> POSTGRES
     
-    SEARCH --> REDIS
-    CATALOG --> REDIS
+    PRODUCT_SERVICE --> EVENT_PUBLISHER
+    EVENT_PUBLISHER --> KAFKA
+    KAFKA --> TOPIC
     
-    CATALOG --> KAFKA
-    PRICE --> KAFKA
-    
-    CATALOG --> INVENTORY
-    CATALOG --> REVIEW
-    
-    IMAGE --> CDN
+    TOPIC --> INVENTORY
+    TOPIC --> CART
+    TOPIC --> ORDER
 ```
 
 ### ドメインモデル設計
 
 ```java
-// 商品エンティティ（Jakarta EE 11 Record活用）
+// 商品エンティティ
 @Entity
 @Table(name = "products")
 public class Product {
     
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    public UUID id;
     
     @Column(name = "sku", unique = true, nullable = false)
-    private String sku;
+    public String sku;
     
     @Column(name = "name", nullable = false)
-    private String name;
+    public String name;
+    
+    @Column(name = "category", nullable = false)
+    public String category;
+    
+    @Column(name = "brand", nullable = false)
+    public String brand;
+    
+    @Column(name = "equipment_type")
+    public String equipmentType;
+    
+    @Column(name = "base_price", precision = 10, scale = 2)
+    public BigDecimal basePrice;
+    
+    @Column(name = "size_range")
+    public String sizeRange;
+    
+    @Column(name = "difficulty_level")
+    public String difficultyLevel;
     
     @Column(name = "description", columnDefinition = "TEXT")
-    private String description;
+    public String description;
     
-    @Embedded
-    private ProductSpecification specification;
+    @Column(name = "image_url")
+    public String imageUrl;
     
-    @Embedded
-    private ProductStatus status;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id")
-    private Category category;
-    
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "brand_id")
-    private Brand brand;
-    
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ProductVariant> variants = new ArrayList<>();
-    
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ProductImage> images = new ArrayList<>();
-    
-    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private List<ProductPrice> priceHistory = new ArrayList<>();
-    
-    @ElementCollection
-    @CollectionTable(name = "product_tags", joinColumns = @JoinColumn(name = "product_id"))
-    @Column(name = "tag")
-    private Set<String> tags = new HashSet<>();
+    @Column(name = "is_active", nullable = false)
+    public boolean isActive = true;
     
     @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
+    public LocalDateTime createdAt;
     
     @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    public LocalDateTime updatedAt;
     
     @PrePersist
     void prePersist() {
@@ -211,188 +406,371 @@ public class Product {
     void preUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
+}
+
+// カテゴリエンティティ
+@Entity
+@Table(name = "categories")
+public class Category {
     
-    // Virtual Threads対応の非同期メソッド
-    @Asynchronous
-    public CompletableFuture<InventoryStatus> getInventoryStatusAsync() {
-        return CompletableFuture.supplyAsync(() -> {
-            return inventoryServiceClient.getInventoryStatus(this.id);
-        });
-    }
-}
-
-// Record ベース Value Objects
-public record ProductSpecification(
-    Material material,
-    SkiType skiType,
-    DifficultyLevel difficultyLevel,
-    String length,
-    String width,
-    String weight,
-    String radius,
-    String flex,
-    Map<String, String> additionalSpecs
-) {
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    public UUID id;
     
-    public boolean isCompatibleWith(SkierProfile profile) {
-        return switch (difficultyLevel) {
-            case BEGINNER -> profile.level() == SkierLevel.BEGINNER || profile.level() == SkierLevel.INTERMEDIATE;
-            case INTERMEDIATE -> profile.level() != SkierLevel.EXPERT;
-            case ADVANCED -> profile.level() == SkierLevel.EXPERT || profile.level() == SkierLevel.ADVANCED;
-            case EXPERT -> profile.level() == SkierLevel.EXPERT;
-        };
-    }
+    @Column(name = "name", nullable = false)
+    public String name;
+    
+    @Column(name = "description")
+    public String description;
+    
+    @Column(name = "parent_id")
+    public UUID parentId;
+    
+    @Column(name = "is_active", nullable = false)
+    public boolean isActive = true;
+    
+    @Column(name = "created_at", nullable = false)
+    public LocalDateTime createdAt;
 }
 
-public record ProductStatus(
-    PublishStatus publishStatus,
-    boolean isActive,
-    boolean isFeatured,
-    boolean isDiscontinued,
-    LocalDateTime publishedAt,
-    LocalDateTime discontinuedAt
-) {
-    public boolean isAvailableForPurchase() {
-        return publishStatus == PublishStatus.PUBLISHED 
-            && isActive 
-            && !isDiscontinued;
-    }
+// ブランドエンティティ
+@Entity
+@Table(name = "brands")
+public class Brand {
+    
+    @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
+    public UUID id;
+    
+    @Column(name = "name", nullable = false, unique = true)
+    public String name;
+    
+    @Column(name = "description")
+    public String description;
+    
+    @Column(name = "country")
+    public String country;
+    
+    @Column(name = "logo_url")
+    public String logoUrl;
+    
+    @Column(name = "is_active", nullable = false)
+    public boolean isActive = true;
+    
+    @Column(name = "created_at", nullable = false)
+    public LocalDateTime createdAt;
 }
 
-// Sealed Classes for Type Safety
-public sealed interface ProductEvent
-    permits ProductCreatedEvent, ProductUpdatedEvent, ProductDiscontinuedEvent {
-}
-
-public record ProductCreatedEvent(
-    UUID productId,
-    String sku,
-    String name,
-    UUID categoryId,
-    LocalDateTime createdAt
-) implements ProductEvent {}
-
-public record ProductUpdatedEvent(
-    UUID productId,
-    String fieldName,
-    String oldValue,
-    String newValue,
-    LocalDateTime updatedAt
-) implements ProductEvent {}
-
-// Enums
+// Enum定義
 public enum SkiType {
-    ALL_MOUNTAIN("オールマウンテン"),
-    CARVING("カービング"),
-    FREESTYLE("フリースタイル"),
-    RACING("レーシング"),
-    TOURING("ツーリング"),
-    POWDER("パウダー");
-    
-    private final String displayName;
-    
-    SkiType(String displayName) {
-        this.displayName = displayName;
-    }
-    
-    public String getDisplayName() {
-        return displayName;
-    }
+    ALL_MOUNTAIN, CARVING, FREESTYLE, RACING, TOURING, POWDER
 }
 
 public enum DifficultyLevel {
-    BEGINNER(1, "初心者"),
-    INTERMEDIATE(2, "中級者"),
-    ADVANCED(3, "上級者"),
-    EXPERT(4, "エキスパート");
-    
-    private final int level;
-    private final String displayName;
-    
-    DifficultyLevel(int level, String displayName) {
-        this.level = level;
-        this.displayName = displayName;
-    }
-    
-    public boolean isHigherThan(DifficultyLevel other) {
-        return this.level > other.level;
-    }
+    BEGINNER, INTERMEDIATE, ADVANCED, EXPERT
+}
+
+public enum Material {
+    WOOD, COMPOSITE, CARBON, TITANIUM
 }
 
 public enum PublishStatus {
-    DRAFT, REVIEW_PENDING, PUBLISHED, ARCHIVED
+    DRAFT, PUBLISHED, ARCHIVED
+}
+
+public enum SkierLevel {
+    BEGINNER, INTERMEDIATE, ADVANCED, EXPERT
 }
 ```
 
-### 商品検索インデックス設計
+## 商品管理設計 {#product-management-design}
+
+### 商品サービス設計
 
 ```java
-// Elasticsearch用商品インデックス
-public record ProductSearchDocument(
-    String id,
+@ApplicationScoped
+@Transactional
+public class ProductService {
+    
+    @Inject
+    ProductRepository productRepository;
+    
+    @Inject
+    ProductEventPublisher eventPublisher;
+    
+    @Inject
+    Logger logger;
+    
+    /**
+     * 商品作成
+     */
+    public Product createProduct(ProductCreateRequest request) {
+        // 入力値検証
+        validateProductRequest(request);
+        
+        // SKU重複チェック
+        if (productRepository.existsBySku(request.sku())) {
+            throw new DuplicateSkuException("SKU already exists: " + request.sku());
+        }
+        
+        // 商品エンティティ作成
+        Product product = new Product();
+        product.sku = request.sku();
+        product.name = request.name();
+        product.category = request.category();
+        product.brand = request.brand();
+        product.equipmentType = request.equipmentType();
+        product.basePrice = request.basePrice();
+        product.sizeRange = request.sizeRange();
+        product.difficultyLevel = request.difficultyLevel();
+        product.description = request.description();
+        product.imageUrl = request.imageUrl();
+        
+        // データベース保存
+        Product savedProduct = productRepository.persist(product);
+        
+        // イベント発行
+        eventPublisher.publishProductCreated(savedProduct);
+        
+        logger.info("Created product: " + savedProduct.sku);
+        return savedProduct;
+    }
+    
+    /**
+     * 商品更新
+     */
+    public Product updateProduct(UUID productId, ProductUpdateRequest request) {
+        Product existingProduct = findByIdOrThrow(productId);
+        Product oldProduct = cloneProduct(existingProduct);
+        
+        // 更新可能フィールドの更新
+        existingProduct.name = request.name();
+        existingProduct.category = request.category();
+        existingProduct.brand = request.brand();
+        existingProduct.basePrice = request.basePrice();
+        existingProduct.description = request.description();
+        existingProduct.imageUrl = request.imageUrl();
+        
+        // データベース保存
+        Product updatedProduct = productRepository.persist(existingProduct);
+        
+        // 変更イベント発行
+        eventPublisher.publishProductUpdated(oldProduct, updatedProduct);
+        
+        logger.info("Updated product: " + updatedProduct.sku);
+        return updatedProduct;
+    }
+    
+    /**
+     * 商品削除（論理削除）
+     */
+    public void deleteProduct(UUID productId) {
+        Product product = findByIdOrThrow(productId);
+        
+        product.isActive = false;
+        productRepository.persist(product);
+        
+        // 削除イベント発行
+        eventPublisher.publishProductDeleted(product.id, product.sku);
+        
+        logger.info("Deleted product: " + product.sku);
+    }
+    
+    /**
+     * 商品アクティベート
+     */
+    public void activateProduct(UUID productId) {
+        Product product = findByIdOrThrow(productId);
+        
+        if (product.isActive) {
+            throw new IllegalStateException("Product is already active: " + productId);
+        }
+        
+        product.isActive = true;
+        productRepository.persist(product);
+        
+        // アクティベートイベント発行
+        eventPublisher.publishProductActivated(product.id, product.sku);
+        
+        logger.info("Activated product: " + product.sku);
+    }
+    
+    /**
+     * 商品ディアクティベート
+     */
+    public void deactivateProduct(UUID productId) {
+        Product product = findByIdOrThrow(productId);
+        
+        if (!product.isActive) {
+            throw new IllegalStateException("Product is already inactive: " + productId);
+        }
+        
+        product.isActive = false;
+        productRepository.persist(product);
+        
+        // ディアクティベートイベント発行
+        eventPublisher.publishProductDeactivated(product.id, product.sku);
+        
+        logger.info("Deactivated product: " + product.sku);
+    }
+    
+    // 検索・取得メソッド
+    public List<Product> findActiveProducts() {
+        return productRepository.findByIsActive(true);
+    }
+    
+    public List<Product> findByCategory(String category) {
+        return productRepository.findByCategoryAndIsActive(category, true);
+    }
+    
+    public List<Product> findByBrand(String brand) {
+        return productRepository.findByBrandAndIsActive(brand, true);
+    }
+    
+    public List<Product> findByEquipmentType(String equipmentType) {
+        return productRepository.findByEquipmentTypeAndIsActive(equipmentType, true);
+    }
+    
+    public Optional<Product> findBySku(String sku) {
+        return productRepository.findBySku(sku);
+    }
+    
+    private Product findByIdOrThrow(UUID productId) {
+        return productRepository.findByIdOptional(productId)
+            .orElseThrow(() -> new ProductNotFoundException("Product not found: " + productId));
+    }
+    
+    private void validateProductRequest(ProductCreateRequest request) {
+        if (request.sku() == null || request.sku().isBlank()) {
+            throw new IllegalArgumentException("SKU is required");
+        }
+        if (request.name() == null || request.name().isBlank()) {
+            throw new IllegalArgumentException("Name is required");
+        }
+        if (request.basePrice() == null || request.basePrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Base price must be positive");
+        }
+    }
+    
+    private Product cloneProduct(Product original) {
+        // 変更前の状態を保持するためのクローン作成
+        Product clone = new Product();
+        clone.id = original.id;
+        clone.sku = original.sku;
+        clone.name = original.name;
+        clone.category = original.category;
+        clone.brand = original.brand;
+        clone.equipmentType = original.equipmentType;
+        clone.basePrice = original.basePrice;
+        clone.description = original.description;
+        clone.imageUrl = original.imageUrl;
+        return clone;
+    }
+}
+```
+
+### Repository設計
+
+```java
+@ApplicationScoped
+public class ProductRepository implements PanacheRepositoryBase<Product, UUID> {
+    
+    public Optional<Product> findBySku(String sku) {
+        return find("sku", sku).firstResultOptional();
+    }
+    
+    public boolean existsBySku(String sku) {
+        return count("sku", sku) > 0;
+    }
+    
+    public List<Product> findByIsActive(boolean isActive) {
+        return find("isActive", isActive).list();
+    }
+    
+    public List<Product> findByCategoryAndIsActive(String category, boolean isActive) {
+        return find("category = ?1 AND isActive = ?2", category, isActive).list();
+    }
+    
+    public List<Product> findByBrandAndIsActive(String brand, boolean isActive) {
+        return find("brand = ?1 AND isActive = ?2", brand, isActive).list();
+    }
+    
+    public List<Product> findByEquipmentTypeAndIsActive(String equipmentType, boolean isActive) {
+        return find("equipmentType = ?1 AND isActive = ?2", equipmentType, isActive).list();
+    }
+    
+    public List<Product> searchByNameContaining(String namePattern) {
+        return find("LOWER(name) LIKE LOWER(?1) AND isActive = true", 
+                   "%" + namePattern + "%").list();
+    }
+    
+    public List<Product> findByPriceRange(BigDecimal minPrice, BigDecimal maxPrice) {
+        return find("basePrice >= ?1 AND basePrice <= ?2 AND isActive = true", 
+                   minPrice, maxPrice).list();
+    }
+}
+```
+
+### DTOクラス設計
+
+```java
+// 商品作成リクエスト
+public record ProductCreateRequest(
+    @NotBlank String sku,
+    @NotBlank String name,
+    @NotBlank String category,
+    @NotBlank String brand,
+    String equipmentType,
+    @NotNull @DecimalMin("0.01") BigDecimal basePrice,
+    String sizeRange,
+    String difficultyLevel,
+    String description,
+    String imageUrl
+) {}
+
+// 商品更新リクエスト
+public record ProductUpdateRequest(
+    @NotBlank String name,
+    @NotBlank String category,
+    @NotBlank String brand,
+    @NotNull @DecimalMin("0.01") BigDecimal basePrice,
+    String description,
+    String imageUrl
+) {}
+
+// 商品レスポンス
+public record ProductResponse(
+    UUID id,
     String sku,
     String name,
-    String description,
-    CategoryInfo category,
-    BrandInfo brand,
-    ProductSpecificationSearchable specification,
-    PriceInfo currentPrice,
-    List<String> tags,
-    double popularityScore,
-    LocalDateTime lastUpdated
-) {
-    
-    public static ProductSearchDocument from(Product product) {
-        return new ProductSearchDocument(
-            product.getId().toString(),
-            product.getSku(),
-            product.getName(),
-            product.getDescription(),
-            CategoryInfo.from(product.getCategory()),
-            BrandInfo.from(product.getBrand()),
-            ProductSpecificationSearchable.from(product.getSpecification()),
-            PriceInfo.from(product.getCurrentPrice()),
-            new ArrayList<>(product.getTags()),
-            calculatePopularityScore(product),
-            product.getUpdatedAt()
-        );
-    }
-}
-
-public record CategoryInfo(
-    String id,
-    String name,
-    String path,
-    List<String> ancestors
-) {
-    public static CategoryInfo from(Category category) {
-        return new CategoryInfo(
-            category.getId().toString(),
-            category.getName(),
-            category.getPath(),
-            category.getAncestors().stream()
-                .map(Category::getName)
-                .collect(Collectors.toList())
-        );
-    }
-}
-
-public record ProductSpecificationSearchable(
-    String material,
-    String skiType,
+    String category,
+    String brand,
+    String equipmentType,
+    BigDecimal basePrice,
+    String sizeRange,
     String difficultyLevel,
-    NumericRange lengthRange,
-    NumericRange widthRange,
-    NumericRange weightRange
+    String description,
+    String imageUrl,
+    boolean isActive,
+    LocalDateTime createdAt,
+    LocalDateTime updatedAt
 ) {
-    public static ProductSpecificationSearchable from(ProductSpecification spec) {
-        return new ProductSpecificationSearchable(
-            spec.material().toString(),
-            spec.skiType().toString(),
-            spec.difficultyLevel().toString(),
-            parseNumericRange(spec.length()),
-            parseNumericRange(spec.width()),
-            parseNumericRange(spec.weight())
+    public static ProductResponse from(Product product) {
+        return new ProductResponse(
+            product.id,
+            product.sku,
+            product.name,
+            product.category,
+            product.brand,
+            product.equipmentType,
+            product.basePrice,
+            product.sizeRange,
+            product.difficultyLevel,
+            product.description,
+            product.imageUrl,
+            product.isActive,
+            product.createdAt,
+            product.updatedAt
         );
     }
 }
@@ -400,406 +778,132 @@ public record ProductSpecificationSearchable(
 
 ## API設計
 
-### OpenAPI 3.1 仕様
+### REST API エンドポイント
 
-```yaml
-# product-catalog-api.yml
-openapi: 3.1.0
-info:
-  title: Product Catalog Service API
-  version: 1.0.0
-  description: スキー用品ショップ 商品カタログサービス
+#### 商品管理
 
-servers:
-  - url: https://api.ski-shop.com/v1
-    description: Production server
-  - url: https://staging.api.ski-shop.com/v1
-    description: Staging server
-  - url: http://localhost:8082
-    description: Local development
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/products` | 商品一覧取得 |
+| GET | `/api/products/{id}` | 商品詳細取得 |
+| GET | `/api/products/sku/{sku}` | SKUによる商品取得 |
+| POST | `/api/products` | 商品登録 |
+| PUT | `/api/products/{id}` | 商品更新 |
+| DELETE | `/api/products/{id}` | 商品削除 |
+| PUT | `/api/products/{id}/activate` | 商品アクティベート |
+| PUT | `/api/products/{id}/deactivate` | 商品ディアクティベート |
 
-paths:
-  /products:
-    get:
-      summary: 商品一覧取得・検索
-      operationId: searchProducts
-      tags: [Products]
-      parameters:
-        - name: q
-          in: query
-          description: 検索キーワード
-          schema:
-            type: string
-            example: "カービングスキー"
-        - name: category
-          in: query
-          description: カテゴリID
-          schema:
-            type: string
-            format: uuid
-        - name: brand
-          in: query
-          description: ブランドID
-          schema:
-            type: string
-            format: uuid
-        - name: skiType
-          in: query
-          description: スキータイプ
-          schema:
-            type: string
-            enum: [ALL_MOUNTAIN, CARVING, FREESTYLE, RACING, TOURING, POWDER]
-        - name: difficultyLevel
-          in: query
-          description: 難易度レベル
-          schema:
-            type: string
-            enum: [BEGINNER, INTERMEDIATE, ADVANCED, EXPERT]
-        - name: priceMin
-          in: query
-          description: 最低価格
-          schema:
-            type: integer
-            minimum: 0
-        - name: priceMax
-          in: query
-          description: 最高価格
-          schema:
-            type: integer
-            minimum: 0
-        - name: lengthMin
-          in: query
-          description: 最小長さ (cm)
-          schema:
-            type: integer
-            minimum: 0
-        - name: lengthMax
-          in: query
-          description: 最大長さ (cm)
-          schema:
-            type: integer
-            minimum: 0
-        - name: inStock
-          in: query
-          description: 在庫ありのみ
-          schema:
-            type: boolean
-            default: false
-        - name: featured
-          in: query
-          description: 注目商品のみ
-          schema:
-            type: boolean
-            default: false
-        - name: sort
-          in: query
-          description: ソート順
-          schema:
-            type: string
-            enum: [relevance, price_asc, price_desc, name_asc, name_desc, created_desc, popularity]
-            default: relevance
-        - name: page
-          in: query
-          description: ページ番号
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: size
-          in: query
-          description: 1ページあたりの件数
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        '200':
-          description: 商品検索結果
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProductSearchResponse'
+#### カテゴリ管理
 
-    post:
-      summary: 商品登録
-      operationId: createProduct
-      tags: [Products]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProductCreateRequest'
-      responses:
-        '201':
-          description: 商品登録成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProductResponse'
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/categories` | カテゴリ一覧取得 |
+| GET | `/api/categories/{id}` | カテゴリ詳細取得 |
+| POST | `/api/categories` | カテゴリ登録 |
+| PUT | `/api/categories/{id}` | カテゴリ更新 |
 
-  /products/{productId}:
-    get:
-      summary: 商品詳細取得
-      operationId: getProduct
-      tags: [Products]
-      parameters:
-        - name: productId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: 商品詳細
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProductDetailResponse'
-        '404':
-          description: 商品が見つからない
+#### ブランド管理
 
-    put:
-      summary: 商品情報更新
-      operationId: updateProduct
-      tags: [Products]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: productId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProductUpdateRequest'
-      responses:
-        '200':
-          description: 更新成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProductResponse'
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/brands` | ブランド一覧取得 |
+| GET | `/api/brands/{id}` | ブランド詳細取得 |
+| POST | `/api/brands` | ブランド登録 |
+| PUT | `/api/brands/{id}` | ブランド更新 |
 
-  /products/{productId}/variants:
-    get:
-      summary: 商品バリエーション一覧取得
-      operationId: getProductVariants
-      tags: [Products]
-      parameters:
-        - name: productId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: バリエーション一覧
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProductVariantResponse'
+### 商品検索API
 
-  /categories:
-    get:
-      summary: カテゴリ階層取得
-      operationId: getCategories
-      tags: [Categories]
-      parameters:
-        - name: parentId
-          in: query
-          description: 親カテゴリID
-          schema:
-            type: string
-            format: uuid
-        - name: depth
-          in: query
-          description: 取得階層の深さ
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 5
-            default: 3
-      responses:
-        '200':
-          description: カテゴリ階層
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CategoryResponse'
-
-  /brands:
-    get:
-      summary: ブランド一覧取得
-      operationId: getBrands
-      tags: [Brands]
-      parameters:
-        - name: featured
-          in: query
-          description: 注目ブランドのみ
-          schema:
-            type: boolean
-            default: false
-      responses:
-        '200':
-          description: ブランド一覧
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BrandResponse'
-
-components:
-  schemas:
-    ProductSearchResponse:
-      type: object
-      properties:
-        products:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProductSummaryResponse'
-        pagination:
-          $ref: '#/components/schemas/PaginationInfo'
-        facets:
-          $ref: '#/components/schemas/SearchFacets'
-        total:
-          type: integer
-          example: 1250
-
-    ProductSummaryResponse:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        sku:
-          type: string
-          example: "SKI-CARV-001"
-        name:
-          type: string
-          example: "プロカービングスキー165cm"
-        description:
-          type: string
-          example: "初心者から中級者向けのカービングスキー"
-        category:
-          $ref: '#/components/schemas/CategorySummaryResponse'
-        brand:
-          $ref: '#/components/schemas/BrandSummaryResponse'
-        currentPrice:
-          $ref: '#/components/schemas/PriceResponse'
-        primaryImage:
-          $ref: '#/components/schemas/ImageResponse'
-        specification:
-          $ref: '#/components/schemas/SpecificationSummaryResponse'
-        rating:
-          type: number
-          format: float
-          minimum: 0
-          maximum: 5
-          example: 4.2
-        reviewCount:
-          type: integer
-          example: 125
-        inStock:
-          type: boolean
-        featured:
-          type: boolean
-
-    ProductCreateRequest:
-      type: object
-      required:
-        - sku
-        - name
-        - categoryId
-        - brandId
-        - specification
-      properties:
-        sku:
-          type: string
-          pattern: '^[A-Z0-9-]+$'
-          example: "SKI-CARV-001"
-        name:
-          type: string
-          maxLength: 255
-          example: "プロカービングスキー165cm"
-        description:
-          type: string
-          maxLength: 2000
-          example: "初心者から中級者向けのカービングスキー"
-        categoryId:
-          type: string
-          format: uuid
-        brandId:
-          type: string
-          format: uuid
-        specification:
-          $ref: '#/components/schemas/SpecificationRequest'
-        tags:
-          type: array
-          items:
-            type: string
-          maxItems: 20
-        status:
-          $ref: '#/components/schemas/ProductStatusRequest'
-
-    SpecificationRequest:
-      type: object
-      required:
-        - material
-        - skiType
-        - difficultyLevel
-        - length
-        - width
-      properties:
-        material:
-          type: string
-          enum: [WOOD, COMPOSITE, CARBON, TITANIUM]
-        skiType:
-          type: string
-          enum: [ALL_MOUNTAIN, CARVING, FREESTYLE, RACING, TOURING, POWDER]
-        difficultyLevel:
-          type: string
-          enum: [BEGINNER, INTERMEDIATE, ADVANCED, EXPERT]
-        length:
-          type: string
-          pattern: '^\d+cm$'
-          example: "165cm"
-        width:
-          type: string
-          pattern: '^\d+mm$'
-          example: "75mm"
-        weight:
-          type: string
-          pattern: '^\d+(\.\d+)?kg$'
-          example: "2.8kg"
-        radius:
-          type: string
-          pattern: '^\d+m$'
-          example: "14m"
-        flex:
-          type: string
-          enum: [SOFT, MEDIUM, HARD]
-
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+```java
+@Path("/api/products")
+@ApplicationScoped
+public class ProductResource {
+    
+    @Inject
+    ProductService productService;
+    
+    @GET
+    public Response getProducts(
+            @QueryParam("category") String category,
+            @QueryParam("brand") String brand,
+            @QueryParam("equipmentType") String equipmentType,
+            @QueryParam("search") String search,
+            @QueryParam("minPrice") BigDecimal minPrice,
+            @QueryParam("maxPrice") BigDecimal maxPrice) {
+        
+        List<Product> products;
+        
+        if (search != null && !search.isBlank()) {
+            products = productService.searchByName(search);
+        } else if (category != null) {
+            products = productService.findByCategory(category);
+        } else if (brand != null) {
+            products = productService.findByBrand(brand);
+        } else if (equipmentType != null) {
+            products = productService.findByEquipmentType(equipmentType);
+        } else {
+            products = productService.findActiveProducts();
+        }
+        
+        // 価格フィルタリング
+        if (minPrice != null || maxPrice != null) {
+            products = products.stream()
+                .filter(p -> priceInRange(p.basePrice, minPrice, maxPrice))
+                .collect(Collectors.toList());
+        }
+        
+        List<ProductResponse> response = products.stream()
+            .map(ProductResponse::from)
+            .collect(Collectors.toList());
+            
+        return Response.ok(response).build();
+    }
+    
+    @GET
+    @Path("/{id}")
+    public Response getProduct(@PathParam("id") UUID id) {
+        return productService.findById(id)
+            .map(ProductResponse::from)
+            .map(response -> Response.ok(response).build())
+            .orElse(Response.status(Response.Status.NOT_FOUND).build());
+    }
+    
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response createProduct(@Valid ProductCreateRequest request) {
+        Product product = productService.createProduct(request);
+        ProductResponse response = ProductResponse.from(product);
+        return Response.status(Response.Status.CREATED).entity(response).build();
+    }
+    
+    @PUT
+    @Path("/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updateProduct(@PathParam("id") UUID id, 
+                                @Valid ProductUpdateRequest request) {
+        Product product = productService.updateProduct(id, request);
+        ProductResponse response = ProductResponse.from(product);
+        return Response.ok(response).build();
+    }
+    
+    @DELETE
+    @Path("/{id}")
+    public Response deleteProduct(@PathParam("id") UUID id) {
+        productService.deleteProduct(id);
+        return Response.noContent().build();
+    }
+    
+    private boolean priceInRange(BigDecimal price, BigDecimal minPrice, BigDecimal maxPrice) {
+        if (minPrice != null && price.compareTo(minPrice) < 0) {
+            return false;
+        }
+        if (maxPrice != null && price.compareTo(maxPrice) > 0) {
+            return false;
+        }
+        return true;
+    }
+}
 ```
 
 ## データベース設計
@@ -812,976 +916,196 @@ erDiagram
         UUID id PK
         VARCHAR sku UK
         VARCHAR name
-        TEXT description
-        UUID category_id FK
-        UUID brand_id FK
-        VARCHAR material
-        VARCHAR ski_type
+        VARCHAR category
+        VARCHAR brand
+        VARCHAR equipment_type
+        DECIMAL base_price
+        VARCHAR size_range
         VARCHAR difficulty_level
-        VARCHAR length
-        VARCHAR width
-        VARCHAR weight
-        VARCHAR radius
-        VARCHAR flex
-        VARCHAR publish_status
+        TEXT description
+        VARCHAR image_url
         BOOLEAN is_active
-        BOOLEAN is_featured
-        BOOLEAN is_discontinued
-        TIMESTAMP published_at
-        TIMESTAMP discontinued_at
         TIMESTAMP created_at
         TIMESTAMP updated_at
     }
     
     CATEGORIES {
         UUID id PK
-        VARCHAR name
+        VARCHAR name UK
         TEXT description
         UUID parent_id FK
-        VARCHAR path
-        INTEGER level
-        INTEGER sort_order
         BOOLEAN is_active
         TIMESTAMP created_at
-        TIMESTAMP updated_at
     }
     
     BRANDS {
         UUID id PK
-        VARCHAR name
+        VARCHAR name UK
         TEXT description
         VARCHAR country
         VARCHAR logo_url
-        BOOLEAN is_featured
         BOOLEAN is_active
         TIMESTAMP created_at
-        TIMESTAMP updated_at
     }
     
-    PRODUCT_VARIANTS {
-        UUID id PK
-        UUID product_id FK
-        VARCHAR variant_type
-        VARCHAR variant_value
-        VARCHAR sku
-        DECIMAL additional_price
-        BOOLEAN is_default
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-    
-    PRODUCT_IMAGES {
-        UUID id PK
-        UUID product_id FK
-        VARCHAR image_url
-        VARCHAR alt_text
-        VARCHAR image_type
-        INTEGER sort_order
-        BOOLEAN is_primary
-        TIMESTAMP created_at
-        TIMESTAMP updated_at
-    }
-    
-    PRODUCT_PRICES {
-        UUID id PK
-        UUID product_id FK
-        DECIMAL base_price
-        DECIMAL sale_price
-        DECIMAL cost_price
-        TIMESTAMP effective_from
-        TIMESTAMP effective_to
-        BOOLEAN is_current
-        TIMESTAMP created_at
-    }
-    
-    PRODUCT_TAGS {
-        UUID product_id FK
-        VARCHAR tag
-    }
-    
-    PRODUCT_REVIEWS_SUMMARY {
-        UUID product_id PK FK
-        DECIMAL average_rating
-        INTEGER review_count
-        INTEGER five_star_count
-        INTEGER four_star_count
-        INTEGER three_star_count
-        INTEGER two_star_count
-        INTEGER one_star_count
-        TIMESTAMP last_updated
-    }
-    
-    PRODUCTS ||--o{ PRODUCT_VARIANTS : "has"
-    PRODUCTS ||--o{ PRODUCT_IMAGES : "has"
-    PRODUCTS ||--o{ PRODUCT_PRICES : "has"
-    PRODUCTS ||--o{ PRODUCT_TAGS : "has"
-    PRODUCTS ||--|| PRODUCT_REVIEWS_SUMMARY : "summarizes"
     CATEGORIES ||--o{ CATEGORIES : "parent"
-    CATEGORIES ||--o{ PRODUCTS : "categorizes"
-    BRANDS ||--o{ PRODUCTS : "manufactures"
 ```
 
-### Repository設計（Jakarta Data活用）
+### テーブル設計
 
-```java
-// 商品Repository
-@Repository
-public interface ProductRepository extends BasicRepository<Product, UUID> {
-    
-    @Query("SELECT p FROM Product p WHERE p.sku = :sku")
-    Optional<Product> findBySku(String sku);
-    
-    @Query("""
-        SELECT p FROM Product p 
-        WHERE p.category.id = :categoryId 
-        AND p.status.publishStatus = 'PUBLISHED' 
-        AND p.status.isActive = true
-        ORDER BY p.createdAt DESC
-        """)
-    List<Product> findByCategoryAndPublished(UUID categoryId);
-    
-    @Query("""
-        SELECT p FROM Product p 
-        WHERE p.brand.id = :brandId 
-        AND p.status.publishStatus = 'PUBLISHED' 
-        AND p.status.isActive = true
-        """)
-    List<Product> findByBrandAndPublished(UUID brandId);
-    
-    @Query("""
-        SELECT p FROM Product p 
-        WHERE p.status.isFeatured = true 
-        AND p.status.publishStatus = 'PUBLISHED' 
-        AND p.status.isActive = true
-        ORDER BY p.createdAt DESC
-        """)
-    @Limit(20)
-    List<Product> findFeaturedProducts();
-    
-    @Query("""
-        SELECT p FROM Product p 
-        WHERE p.specification.skiType = :skiType 
-        AND p.specification.difficultyLevel = :difficultyLevel
-        AND p.status.publishStatus = 'PUBLISHED'
-        """)
-    List<Product> findBySkiTypeAndDifficulty(SkiType skiType, DifficultyLevel difficultyLevel);
-}
+#### Products テーブル
 
-// カテゴリRepository
-@Repository
-public interface CategoryRepository extends BasicRepository<Category, UUID> {
-    
-    @Query("SELECT c FROM Category c WHERE c.parent IS NULL ORDER BY c.sortOrder")
-    List<Category> findRootCategories();
-    
-    @Query("""
-        SELECT c FROM Category c 
-        WHERE c.parent.id = :parentId 
-        AND c.isActive = true 
-        ORDER BY c.sortOrder
-        """)
-    List<Category> findByParentId(UUID parentId);
-    
-    @Query("""
-        SELECT c FROM Category c 
-        WHERE c.path LIKE :pathPrefix% 
-        AND c.isActive = true 
-        ORDER BY c.level, c.sortOrder
-        """)
-    List<Category> findByPathPrefix(String pathPrefix);
-    
-    @Query("SELECT c FROM Category c WHERE c.level <= :maxLevel ORDER BY c.path")
-    List<Category> findByMaxLevel(Integer maxLevel);
-}
+```sql
+CREATE TABLE products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sku VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(200) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    brand VARCHAR(100) NOT NULL,
+    equipment_type VARCHAR(50),
+    base_price DECIMAL(10,2) NOT NULL,
+    size_range VARCHAR(50),
+    difficulty_level VARCHAR(20),
+    description TEXT,
+    image_url VARCHAR(500),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- インデックス作成
+CREATE INDEX idx_products_sku ON products(sku);
+CREATE INDEX idx_products_category ON products(category);
+CREATE INDEX idx_products_brand ON products(brand);
+CREATE INDEX idx_products_equipment_type ON products(equipment_type);
+CREATE INDEX idx_products_is_active ON products(is_active);
+CREATE INDEX idx_products_created_at ON products(created_at);
+
+-- 更新時刻自動更新トリガー
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_products_updated_at BEFORE UPDATE
+    ON products FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 ```
 
-## 検索・フィルタリング設計
+#### Categories テーブル
 
-### Elasticsearch設定
+```sql
+CREATE TABLE categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    parent_id UUID REFERENCES categories(id),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-```java
-// 商品サービス (CQRS Pattern 対応)
-@ApplicationScoped
-@Transactional
-public class ProductService {
-    
-    private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
-    
-    @Inject
-    private ProductRepository productRepository;
-    
-    @Inject
-    private CategoryRepository categoryRepository;
-    
-    @Inject
-    private ProductEventPublisher eventPublisher;
-    
-    @Inject
-    private ProductSearchIndexer searchIndexer;
-    
-    @Inject
-    private ProductProcessingSaga productProcessingSaga;
-    
-    @Inject
-    private ProductValidator productValidator;
-    
-    // CQRS Command Handlers
-    @CommandHandler
-    public ProductResult handle(CreateProductCommand command) {
-        try {
-            // 商品データ検証
-            var validationResult = productValidator.validate(command.toRequest());
-            if (!validationResult.isValid()) {
-                return new ProductResult(false, null, validationResult.getErrorMessage());
-            }
-            
-            // カテゴリ存在確認
-            var category = categoryRepository.findById(command.categoryId())
-                .orElseThrow(() -> new CategoryNotFoundException("Category not found: " + command.categoryId()));
-            
-            // 商品作成
-            var product = new Product();
-            product.setSku(command.sku());
-            product.setName(command.name());
-            product.setDescription(command.description());
-            product.setShortDescription(command.shortDescription());
-            product.setCategory(category);
-            product.setBrand(command.brand());
-            product.setPrice(command.price());
-            product.setCostPrice(command.costPrice());
-            product.setStatus(ProductStatus.ACTIVE);
-            product.setCreatedAt(LocalDateTime.now());
-            
-            var savedProduct = productRepository.save(product);
-            
-            // イベント発行
-            eventPublisher.publish(new ProductCreatedEvent(
-                savedProduct.getId(),
-                savedProduct.getSku(),
-                savedProduct.getName(),
-                savedProduct.getPrice(),
-                savedProduct.getCategory().getId(),
-                LocalDateTime.now()
-            ));
-            
-            logger.info("Product created: sku={}, name={}", savedProduct.getSku(), savedProduct.getName());
-            return new ProductResult(true, savedProduct.getId(), "商品作成完了");
-            
-        } catch (Exception e) {
-            logger.error("商品作成エラー: sku=" + command.sku(), e);
-            return new ProductResult(false, null, e.getMessage());
-        }
-    }
-    
-    @CommandHandler
-    public ProductResult handle(UpdateProductCommand command) {
-        try {
-            var product = productRepository.findById(command.productId())
-                .orElseThrow(() -> new ProductNotFoundException("Product not found: " + command.productId()));
-            
-            var oldPrice = product.getPrice();
-            
-            // 商品更新
-            product.setName(command.name());
-            product.setDescription(command.description());
-            product.setShortDescription(command.shortDescription());
-            product.setPrice(command.price());
-            product.setCostPrice(command.costPrice());
-            product.setBrand(command.brand());
-            product.setUpdatedAt(LocalDateTime.now());
-            
-            var savedProduct = productRepository.save(product);
-            
-            // 価格変更の場合は特別なイベント発行
-            if (oldPrice.compareTo(command.price()) != 0) {
-                eventPublisher.publish(new ProductPriceChangedEvent(
-                    savedProduct.getSku(),
-                    oldPrice,
-                    command.price(),
-                    LocalDateTime.now()
-                ));
-            }
-            
-            eventPublisher.publish(new ProductUpdatedEvent(
-                savedProduct.getId(),
-                savedProduct.getSku(),
-                savedProduct.getName(),
-                savedProduct.getPrice(),
-                LocalDateTime.now()
-            ));
-            
-            logger.info("Product updated: sku={}, name={}", savedProduct.getSku(), savedProduct.getName());
-            return new ProductResult(true, savedProduct.getId(), "商品更新完了");
-            
-        } catch (Exception e) {
-            logger.error("商品更新エラー: productId=" + command.productId(), e);
-            return new ProductResult(false, null, e.getMessage());
-        }
-    }
-    
-    @CommandHandler
-    public ProductResult handle(DeactivateProductCommand command) {
-        try {
-            var product = productRepository.findById(command.productId())
-                .orElseThrow(() -> new ProductNotFoundException("Product not found: " + command.productId()));
-            
-            product.setStatus(ProductStatus.INACTIVE);
-            product.setUpdatedAt(LocalDateTime.now());
-            
-            var savedProduct = productRepository.save(product);
-            
-            eventPublisher.publish(new ProductDeactivatedEvent(
-                savedProduct.getId(),
-                savedProduct.getSku(),
-                command.reason(),
-                LocalDateTime.now()
-            ));
-            
-            logger.info("Product deactivated: sku={}, reason={}", savedProduct.getSku(), command.reason());
-            return new ProductResult(true, savedProduct.getId(), "商品無効化完了");
-            
-        } catch (Exception e) {
-            logger.error("商品無効化エラー: productId=" + command.productId(), e);
-            return new ProductResult(false, null, e.getMessage());
-        }
-    }
-    
-    @CommandHandler
-    public ProductResult handle(UpdateProductInventoryCommand command) {
-        try {
-            var product = productRepository.findBySku(command.sku())
-                .orElseThrow(() -> new ProductNotFoundException("Product not found: " + command.sku()));
-            
-            // 在庫情報更新をSagaで処理
-            CompletableFuture.runAsync(() -> {
-                try {
-                    productProcessingSaga.processInventoryUpdate(
-                        product.getId(),
-                        command.sku(),
-                        command.availableQuantity(),
-                        command.reservedQuantity()
-                    );
-                } catch (Exception e) {
-                    logger.error("在庫更新Saga実行エラー: sku=" + command.sku(), e);
-                }
-            }, VirtualThread.ofVirtual().factory());
-            
-            return new ProductResult(true, product.getId(), "在庫更新処理開始");
-            
-        } catch (Exception e) {
-            logger.error("在庫更新エラー: sku=" + command.sku(), e);
-            return new ProductResult(false, null, e.getMessage());
-        }
-    }
-    
-    // CQRS Query Handlers
-    @QueryHandler
-    public ProductProjection handle(GetProductByIdQuery query) {
-        var product = productRepository.findById(query.productId());
-        return product.map(ProductProjection::from)
-            .orElse(null);
-    }
-    
-    @QueryHandler
-    public ProductProjection handle(GetProductBySkuQuery query) {
-        var product = productRepository.findBySku(query.sku());
-        return product.map(ProductProjection::from)
-            .orElse(null);
-    }
-    
-    @QueryHandler
-    public List<ProductProjection> handle(SearchProductsQuery query) {
-        return productRepository.searchProducts(
-                query.searchCriteria(), query.page(), query.size())
-            .stream()
-            .map(ProductProjection::from)
-            .toList();
-    }
-    
-    @QueryHandler
-    public List<ProductProjection> handle(GetProductsByCategoryQuery query) {
-        return productRepository.findByCategoryId(query.categoryId(), query.page(), query.size())
-            .stream()
-            .map(ProductProjection::from)
-            .toList();
-    }
-    
-    @QueryHandler
-    public ProductStatisticsProjection handle(GetProductStatisticsQuery query) {
-        var totalProducts = productRepository.countByDateRange(query.fromDate(), query.toDate());
-        var activeProducts = productRepository.countActiveProducts();
-        var inactiveProducts = productRepository.countInactiveProducts();
-        var averagePrice = productRepository.getAveragePrice();
-        
-        return new ProductStatisticsProjection(
-            totalProducts,
-            activeProducts,
-            inactiveProducts,
-            averagePrice,
-            LocalDateTime.now()
-        );
-    }
-    
-    // Event Handlers
-    @EventHandler
-    public void handle(InventoryChangedEvent event) {
-        logger.info("在庫変更イベント処理開始: sku={}", event.sku());
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                productProcessingSaga.processExternalInventoryChange(
-                    event.sku(),
-                    event.availableQuantity(),
-                    event.reservedQuantity()
-                );
-            } catch (Exception e) {
-                logger.error("在庫変更処理エラー: sku=" + event.sku(), e);
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    @EventHandler
-    public void handle(OrderCreatedEvent event) {
-        logger.info("注文作成イベント処理開始: orderId={}", event.orderId());
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                productProcessingSaga.processOrderProductsUpdate(
-                    event.orderId(),
-                    event.orderItems()
-                );
-            } catch (Exception e) {
-                logger.error("注文商品更新処理エラー: orderId=" + event.orderId(), e);
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    // ヘルパーメソッド
-    private Product findProductById(UUID productId) {
-        return productRepository.findById(productId)
-            .orElseThrow(() -> new ProductNotFoundException("Product not found: " + productId));
-    }
-    
-    private Product findProductBySku(String sku) {
-        return productRepository.findBySku(sku)
-            .orElseThrow(() -> new ProductNotFoundException("Product not found: " + sku));
-    }
-}
-
-// 商品処理Sagaパターン
-@ApplicationScoped
-@Transactional
-public class ProductProcessingSaga {
-    
-    private static final Logger logger = LoggerFactory.getLogger(ProductProcessingSaga.class);
-    
-    @Inject
-    private ProductRepository productRepository;
-    
-    @Inject
-    private SagaStateRepository sagaStateRepository;
-    
-    @Inject
-    private ProductEventPublisher eventPublisher;
-    
-    @Inject
-    private ProductSearchIndexer searchIndexer;
-    
-    @Inject
-    private InventoryServiceClient inventoryServiceClient;
-    
-    public CompletableFuture<SagaResult> processInventoryUpdate(
-            UUID productId, String sku, Integer availableQuantity, Integer reservedQuantity) {
-        
-        return CompletableFuture.supplyAsync(() -> {
-            var sagaId = UUID.randomUUID();
-            var sagaState = new SagaState(sagaId, productId, SagaType.PRODUCT_INVENTORY_UPDATE);
-            sagaStateRepository.save(sagaState);
-            
-            try {
-                logger.info("商品在庫更新Saga開始: sagaId={}, sku={}", sagaId, sku);
-                
-                // Step 1: 商品検証
-                sagaState.setCurrentStep("VALIDATING_PRODUCT");
-                var product = productRepository.findById(productId)
-                    .orElseThrow(() -> new ProductNotFoundException("Product not found"));
-                sagaState.setLastCompletedStep("VALIDATING_PRODUCT");
-                
-                // Step 2: 在庫サービス更新
-                sagaState.setCurrentStep("UPDATING_INVENTORY");
-                var inventoryResult = inventoryServiceClient.updateInventory(sku, availableQuantity, reservedQuantity);
-                if (!inventoryResult.success()) {
-                    return handleSagaFailure(sagaState, "在庫更新失敗", inventoryResult.message());
-                }
-                sagaState.setLastCompletedStep("UPDATING_INVENTORY");
-                
-                // Step 3: 検索インデックス更新
-                sagaState.setCurrentStep("UPDATING_SEARCH_INDEX");
-                searchIndexer.updateProductInventory(sku, availableQuantity);
-                sagaState.setLastCompletedStep("UPDATING_SEARCH_INDEX");
-                
-                // Step 4: 在庫更新イベント発行
-                sagaState.setCurrentStep("PUBLISHING_EVENTS");
-                eventPublisher.publish(new ProductInventoryUpdatedEvent(
-                    productId,
-                    sku,
-                    availableQuantity,
-                    reservedQuantity,
-                    LocalDateTime.now()
-                ));
-                sagaState.setLastCompletedStep("PUBLISHING_EVENTS");
-                
-                // Saga完了
-                sagaState.complete();
-                sagaStateRepository.save(sagaState);
-                
-                logger.info("商品在庫更新Saga完了: sagaId={}, sku={}", sagaId, sku);
-                return new SagaResult(true, "在庫更新完了");
-                
-            } catch (Exception e) {
-                logger.error("商品在庫更新Saga実行エラー: sagaId=" + sagaId, e);
-                return handleSagaFailure(sagaState, "予期しないエラー", e.getMessage());
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    public CompletableFuture<SagaResult> processExternalInventoryChange(
-            String sku, Integer availableQuantity, Integer reservedQuantity) {
-        
-        return CompletableFuture.supplyAsync(() -> {
-            var sagaId = UUID.randomUUID();
-            var sagaState = new SagaState(sagaId, null, SagaType.EXTERNAL_INVENTORY_SYNC);
-            sagaStateRepository.save(sagaState);
-            
-            try {
-                logger.info("外部在庫同期Saga開始: sagaId={}, sku={}", sagaId, sku);
-                
-                // Step 1: 商品検索
-                sagaState.setCurrentStep("FINDING_PRODUCT");
-                var product = productRepository.findBySku(sku);
-                if (product.isEmpty()) {
-                    logger.warn("商品が見つかりません: sku={}", sku);
-                    sagaState.complete();
-                    sagaStateRepository.save(sagaState);
-                    return new SagaResult(true, "商品なし - 処理完了");
-                }
-                sagaState.setLastCompletedStep("FINDING_PRODUCT");
-                
-                // Step 2: 検索インデックス更新
-                sagaState.setCurrentStep("UPDATING_SEARCH_INDEX");
-                searchIndexer.updateProductInventory(sku, availableQuantity);
-                sagaState.setLastCompletedStep("UPDATING_SEARCH_INDEX");
-                
-                // Step 3: 商品可用性イベント発行
-                sagaState.setCurrentStep("PUBLISHING_EVENTS");
-                if (availableQuantity == 0) {
-                    eventPublisher.publish(new ProductOutOfStockEvent(
-                        product.get().getId(),
-                        sku,
-                        LocalDateTime.now()
-                    ));
-                } else {
-                    eventPublisher.publish(new ProductBackInStockEvent(
-                        product.get().getId(),
-                        sku,
-                        availableQuantity,
-                        LocalDateTime.now()
-                    ));
-                }
-                sagaState.setLastCompletedStep("PUBLISHING_EVENTS");
-                
-                // Saga完了
-                sagaState.complete();
-                sagaStateRepository.save(sagaState);
-                
-                logger.info("外部在庫同期Saga完了: sagaId={}, sku={}", sagaId, sku);
-                return new SagaResult(true, "在庫同期完了");
-                
-            } catch (Exception e) {
-                logger.error("外部在庫同期Saga実行エラー: sagaId=" + sagaId, e);
-                return handleSagaFailure(sagaState, "予期しないエラー", e.getMessage());
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    public CompletableFuture<SagaResult> processOrderProductsUpdate(
-            UUID orderId, List<OrderItemDto> orderItems) {
-        
-        return CompletableFuture.supplyAsync(() -> {
-            var sagaId = UUID.randomUUID();
-            var sagaState = new SagaState(sagaId, orderId, SagaType.ORDER_PRODUCTS_UPDATE);
-            sagaStateRepository.save(sagaState);
-            
-            try {
-                logger.info("注文商品更新Saga開始: sagaId={}, orderId={}", sagaId, orderId);
-                
-                // Step 1: 商品人気度更新
-                sagaState.setCurrentStep("UPDATING_POPULARITY");
-                updateProductPopularity(orderItems);
-                sagaState.setLastCompletedStep("UPDATING_POPULARITY");
-                
-                // Step 2: 検索インデックス更新
-                sagaState.setCurrentStep("UPDATING_SEARCH_INDEX");
-                for (var item : orderItems) {
-                    searchIndexer.updateProductPopularity(item.sku());
-                }
-                sagaState.setLastCompletedStep("UPDATING_SEARCH_INDEX");
-                
-                // Step 3: 商品販売イベント発行
-                sagaState.setCurrentStep("PUBLISHING_EVENTS");
-                for (var item : orderItems) {
-                    eventPublisher.publish(new ProductSoldEvent(
-                        item.productId(),
-                        item.sku(),
-                        item.quantity(),
-                        orderId,
-                        LocalDateTime.now()
-                    ));
-                }
-                sagaState.setLastCompletedStep("PUBLISHING_EVENTS");
-                
-                // Saga完了
-                sagaState.complete();
-                sagaStateRepository.save(sagaState);
-                
-                logger.info("注文商品更新Saga完了: sagaId={}, orderId={}", sagaId, orderId);
-                return new SagaResult(true, "商品更新完了");
-                
-            } catch (Exception e) {
-                logger.error("注文商品更新Saga実行エラー: sagaId=" + sagaId, e);
-                return handleSagaFailure(sagaState, "予期しないエラー", e.getMessage());
-            }
-        }, VirtualThread.ofVirtual().factory());
-    }
-    
-    private void updateProductPopularity(List<OrderItemDto> orderItems) {
-        for (var item : orderItems) {
-            var product = productRepository.findBySku(item.sku());
-            if (product.isPresent()) {
-                var p = product.get();
-                p.incrementSalesCount(item.quantity());
-                p.setUpdatedAt(LocalDateTime.now());
-                productRepository.save(p);
-            }
-        }
-    }
-    
-    private SagaResult handleSagaFailure(SagaState sagaState, String reason, String message) {
-        sagaState.fail(reason + ": " + message);
-        sagaStateRepository.save(sagaState);
-        return new SagaResult(false, reason + ": " + message);
-    }
-}
-
-// 商品検索サービス
-@ApplicationScoped
-public class ProductSearchService {
-    
-    @Inject
-    private ElasticsearchClient elasticsearchClient;
-    
-    @Inject
-    private ProductSearchIndexer indexer;
-    
-    public ProductSearchResult searchProducts(ProductSearchQuery query) {
-        var searchRequest = buildSearchRequest(query);
-        
-        try {
-            var response = elasticsearchClient.search(searchRequest, ProductSearchDocument.class);
-            return transformSearchResponse(response, query);
-            
-        } catch (Exception e) {
-            logger.error("Product search failed", e);
-            throw new ProductSearchException("商品検索に失敗しました", e);
-        }
-    }
-    
-    private SearchRequest buildSearchRequest(ProductSearchQuery query) {
-        var builder = SearchRequest.of(s -> s
-            .index("products")
-            .query(buildQuery(query))
-            .aggregations(buildAggregations(query))
-            .sort(buildSort(query))
-            .from(query.getOffset())
-            .size(query.getSize())
-        );
-        
-        return builder;
-    }
-    
-    private Query buildQuery(ProductSearchQuery query) {
-        var boolQuery = BoolQuery.of(b -> {
-            // 基本条件
-            b.filter(f -> f.term(t -> t.field("status.publishStatus").value("PUBLISHED")));
-            b.filter(f -> f.term(t -> t.field("status.isActive").value(true)));
-            
-            // キーワード検索
-            if (query.getKeyword() != null && !query.getKeyword().isBlank()) {
-                b.must(m -> m.multiMatch(mm -> mm
-                    .query(query.getKeyword())
-                    .fields("name^3", "description^2", "tags^1.5", "brand.name^2")
-                    .type(TextQueryType.BestFields)
-                    .fuzziness("AUTO")
-                ));
-            }
-            
-            // カテゴリフィルター
-            if (query.getCategoryId() != null) {
-                b.filter(f -> f.term(t -> t.field("category.id").value(query.getCategoryId())));
-            }
-            
-            // ブランドフィルター
-            if (query.getBrandId() != null) {
-                b.filter(f -> f.term(t -> t.field("brand.id").value(query.getBrandId())));
-            }
-            
-            // スキータイプフィルター
-            if (query.getSkiType() != null) {
-                b.filter(f -> f.term(t -> t.field("specification.skiType").value(query.getSkiType())));
-            }
-            
-            // 価格範囲フィルター
-            if (query.getPriceMin() != null || query.getPriceMax() != null) {
-                b.filter(f -> f.range(r -> {
-                    var rangeBuilder = r.field("currentPrice.amount");
-                    if (query.getPriceMin() != null) {
-                        rangeBuilder.gte(JsonData.of(query.getPriceMin()));
-                    }
-                    if (query.getPriceMax() != null) {
-                        rangeBuilder.lte(JsonData.of(query.getPriceMax()));
-                    }
-                    return rangeBuilder;
-                }));
-            }
-            
-            // 在庫フィルター
-            if (query.isInStockOnly()) {
-                b.filter(f -> f.term(t -> t.field("inStock").value(true)));
-            }
-            
-            return b;
-        });
-        
-        return Query.of(q -> q.bool(boolQuery));
-    }
-    
-    private Map<String, Aggregation> buildAggregations(ProductSearchQuery query) {
-        return Map.of(
-            "categories", Aggregation.of(a -> a
-                .terms(t -> t.field("category.name").size(20))
-            ),
-            "brands", Aggregation.of(a -> a
-                .terms(t -> t.field("brand.name").size(20))
-            ),
-            "skiTypes", Aggregation.of(a -> a
-                .terms(t -> t.field("specification.skiType").size(10))
-            ),
-            "difficultyLevels", Aggregation.of(a -> a
-                .terms(t -> t.field("specification.difficultyLevel").size(5))
-            ),
-            "priceRanges", Aggregation.of(a -> a
-                .range(r -> r
-                    .field("currentPrice.amount")
-                    .ranges(
-                        Range.of(ra -> ra.to(JsonData.of(50000))),
-                        Range.of(ra -> ra.from(JsonData.of(50000)).to(JsonData.of(100000))),
-                        Range.of(ra -> ra.from(JsonData.of(100000)).to(JsonData.of(200000))),
-                        Range.of(ra -> ra.from(JsonData.of(200000)))
-                    )
-                )
-            )
-        );
-    }
-}
-
-// 検索クエリRecord
-public record ProductSearchQuery(
-    String keyword,
-    UUID categoryId,
-    UUID brandId,
-    SkiType skiType,
-    DifficultyLevel difficultyLevel,
-    BigDecimal priceMin,
-    BigDecimal priceMax,
-    Integer lengthMin,
-    Integer lengthMax,
-    boolean inStockOnly,
-    boolean featuredOnly,
-    ProductSearchSort sort,
-    int page,
-    int size
-) {
-    public int getOffset() {
-        return (page - 1) * size;
-    }
-    
-    public int getSize() {
-        return Math.min(size, 100); // 最大100件
-    }
-}
-
-public enum ProductSearchSort {
-    RELEVANCE("_score", SortOrder.Desc),
-    PRICE_ASC("currentPrice.amount", SortOrder.Asc),
-    PRICE_DESC("currentPrice.amount", SortOrder.Desc),
-    NAME_ASC("name.keyword", SortOrder.Asc),
-    NAME_DESC("name.keyword", SortOrder.Desc),
-    CREATED_DESC("createdAt", SortOrder.Desc),
-    POPULARITY("popularityScore", SortOrder.Desc);
-    
-    private final String field;
-    private final SortOrder order;
-    
-    ProductSearchSort(String field, SortOrder order) {
-        this.field = field;
-        this.order = order;
-    }
-}
+CREATE INDEX idx_categories_parent_id ON categories(parent_id);
+CREATE INDEX idx_categories_is_active ON categories(is_active);
 ```
 
-### 検索インデックス管理
+#### Brands テーブル
 
-```java
-// 検索インデックス管理サービス
-@ApplicationScoped
-public class ProductSearchIndexer {
-    
-    @Inject
-    private ElasticsearchClient elasticsearchClient;
-    
-    @Inject
-    private ProductRepository productRepository;
-    
-    @EventObserver
-    public void onProductCreated(@Observes ProductCreatedEvent event) {
-        indexProductAsync(event.productId());
-    }
-    
-    @EventObserver
-    public void onProductUpdated(@Observes ProductUpdatedEvent event) {
-        indexProductAsync(event.productId());
-    }
-    
-    @Asynchronous
-    private CompletableFuture<Void> indexProductAsync(UUID productId) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                var product = productRepository.findById(productId);
-                if (product.isPresent()) {
-                    var document = ProductSearchDocument.from(product.get());
-                    indexDocument(document);
-                }
-            } catch (Exception e) {
-                logger.error("Failed to index product: " + productId, e);
-            }
-        });
-    }
-    
-    public void indexDocument(ProductSearchDocument document) {
-        try {
-            var request = IndexRequest.of(i -> i
-                .index("products")
-                .id(document.id())
-                .document(document)
-            );
-            
-            elasticsearchClient.index(request);
-            
-        } catch (Exception e) {
-            throw new ProductIndexingException("商品インデックス更新に失敗しました", e);
-        }
-    }
-    
-    @Schedule(every = "PT1H") // 1時間毎
-    public void reindexModifiedProducts() {
-        var lastHour = LocalDateTime.now().minusHours(1);
-        var modifiedProducts = productRepository.findModifiedSince(lastHour);
-        
-        modifiedProducts.forEach(product -> {
-            var document = ProductSearchDocument.from(product);
-            indexDocument(document);
-        });
-        
-        logger.info("Reindexed {} modified products", modifiedProducts.size());
-    }
-}
+```sql
+CREATE TABLE brands (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    country VARCHAR(50),
+    logo_url VARCHAR(500),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_brands_is_active ON brands(is_active);
+CREATE INDEX idx_brands_country ON brands(country);
 ```
+
+### 初期データ投入
+
+#### カテゴリデータ
+
+```sql
+INSERT INTO categories (name, description) VALUES
+('SKI_BOARD', 'スキー板'),
+('BOOT', 'スキーブーツ'),
+('POLE', 'ストック'),
+('HELMET', 'ヘルメット'),
+('GOGGLE', 'ゴーグル'),
+('GLOVE', 'グローブ'),
+('WEAR', 'ウェア'),
+('BAG', 'バッグ'),
+('WAX', 'ワックス'),
+('TUNING', 'チューンナップ用品');
+```
+
+#### ブランドデータ
+
+```sql
+INSERT INTO brands (name, country, description) VALUES
+('Rossignol', 'France', 'フランスの老舗スキーブランド'),
+('Atomic', 'Austria', 'オーストリアの革新的スキーメーカー'),
+('Salomon', 'France', 'フランスのスポーツ用品メーカー'),
+('K2', 'USA', 'アメリカのスキー・スノーボードブランド'),
+('Volkl', 'Germany', 'ドイツの高品質スキーメーカー'),
+('Nordica', 'Italy', 'イタリアのスキーブーツ専門メーカー'),
+('Leki', 'Germany', 'ドイツのストック専門メーカー'),
+('POC', 'Sweden', 'スウェーデンの安全用品メーカー'),
+('Smith', 'USA', 'アメリカのゴーグル・ヘルメットメーカー'),
+('Oakley', 'USA', 'アメリカのスポーツ用品メーカー');
+```
+
+### データ移行戦略
+
+Event-Driven Architectureの導入に伴う既存データの移行手順：
+
+1. **現在のスキーマ維持**: 既存のproductsテーブル構造を保持
+2. **イベント発行機能追加**: 商品CRUD操作時にKafkaイベント発行
+3. **下流サービス対応**: Inventory Managementサービスでイベント消費開始
+4. **データ整合性確認**: 既存商品データと新規イベントベースデータの整合性検証
+5. **段階的移行**: 新規商品から段階的にEvent-Driven方式に移行
 
 ## エラー処理
 
-### 商品管理例外設計
+### 例外クラス設計
 
 ```java
 // ベース例外クラス
 public abstract class ProductCatalogException extends RuntimeException {
     protected final String errorCode;
-    protected final int httpStatus;
-    protected final Map<String, Object> details;
     
-    protected ProductCatalogException(String errorCode, String message, int httpStatus) {
+    protected ProductCatalogException(String errorCode, String message) {
         super(message);
         this.errorCode = errorCode;
-        this.httpStatus = httpStatus;
-        this.details = new HashMap<>();
     }
     
-    public ProductCatalogException withDetail(String key, Object value) {
-        this.details.put(key, value);
-        return this;
+    public String getErrorCode() { 
+        return errorCode; 
     }
-    
-    // Getters
-    public String getErrorCode() { return errorCode; }
-    public int getHttpStatus() { return httpStatus; }
-    public Map<String, Object> getDetails() { return details; }
 }
 
 // 具体的な例外クラス
 public class ProductNotFoundException extends ProductCatalogException {
-    public ProductNotFoundException(UUID productId) {
-        super("PRODUCT_NOT_FOUND", 
-              "指定された商品が見つかりません", 404);
-        withDetail("productId", productId);
-    }
-    
-    public ProductNotFoundException(String sku) {
-        super("PRODUCT_NOT_FOUND", 
-              "指定されたSKUの商品が見つかりません", 404);
-        withDetail("sku", sku);
+    public ProductNotFoundException(String message) {
+        super("PRODUCT_NOT_FOUND", message);
     }
 }
 
 public class DuplicateSkuException extends ProductCatalogException {
-    public DuplicateSkuException(String sku) {
-        super("DUPLICATE_SKU", 
-              "指定されたSKUは既に使用されています", 409);
-        withDetail("sku", sku);
+    public DuplicateSkuException(String message) {
+        super("DUPLICATE_SKU", message);
     }
 }
 
-public class InvalidProductSpecificationException extends ProductCatalogException {
-    public InvalidProductSpecificationException(String field, String value, String reason) {
-        super("INVALID_SPECIFICATION", 
-              "商品仕様が正しくありません", 400);
-        withDetail("field", field);
-        withDetail("value", value);
-        withDetail("reason", reason);
-    }
-}
-
-public class CategoryNotFoundException extends ProductCatalogException {
-    public CategoryNotFoundException(UUID categoryId) {
-        super("CATEGORY_NOT_FOUND", 
-              "指定されたカテゴリが見つかりません", 404);
-        withDetail("categoryId", categoryId);
-    }
-}
-
-public class ProductSearchException extends ProductCatalogException {
-    public ProductSearchException(String message, Throwable cause) {
-        super("SEARCH_ERROR", 
-              "商品検索でエラーが発生しました", 500);
-        initCause(cause);
+public class InvalidProductDataException extends ProductCatalogException {
+    public InvalidProductDataException(String message) {
+        super("INVALID_PRODUCT_DATA", message);
     }
 }
 
@@ -1789,39 +1113,39 @@ public class ProductSearchException extends ProductCatalogException {
 @Provider
 public class ProductCatalogExceptionMapper implements ExceptionMapper<Exception> {
     
-    private static final Logger logger = LoggerFactory.getLogger(ProductCatalogExceptionMapper.class);
-    
     @Override
     public Response toResponse(Exception exception) {
-        String requestId = MDC.get("requestId");
+        if (exception instanceof ProductCatalogException pce) {
+            return Response.status(getHttpStatus(pce))
+                .entity(new ErrorResponse(pce.getErrorCode(), pce.getMessage()))
+                .type(MediaType.APPLICATION_JSON)
+                .build();
+        }
         
-        return switch (exception) {
-            case ProductCatalogException pce -> {
-                logger.warn("Product catalog error: {} - {}", pce.getErrorCode(), pce.getMessage());
-                yield Response.status(pce.getHttpStatus())
-                    .entity(createErrorResponse(pce, requestId))
-                    .type(MediaType.APPLICATION_JSON)
-                    .build();
-            }
-            
-            case ConstraintViolationException cve -> {
-                logger.warn("Validation error: {}", cve.getMessage());
-                yield Response.status(400)
-                    .entity(createValidationErrorResponse(cve, requestId))
-                    .type(MediaType.APPLICATION_JSON)
-                    .build();
-            }
-            
-            default -> {
-                logger.error("Unexpected error: {}", exception.getMessage(), exception);
-                yield Response.status(500)
-                    .entity(createInternalErrorResponse(requestId))
-                    .type(MediaType.APPLICATION_JSON)
-                    .build();
-            }
+        if (exception instanceof ConstraintViolationException cve) {
+            return Response.status(400)
+                .entity(new ErrorResponse("VALIDATION_ERROR", "入力値が正しくありません"))
+                .type(MediaType.APPLICATION_JSON)
+                .build();
+        }
+        
+        return Response.status(500)
+            .entity(new ErrorResponse("INTERNAL_ERROR", "内部エラーが発生しました"))
+            .type(MediaType.APPLICATION_JSON)
+            .build();
+    }
+    
+    private int getHttpStatus(ProductCatalogException exception) {
+        return switch (exception.getErrorCode()) {
+            case "PRODUCT_NOT_FOUND" -> 404;
+            case "DUPLICATE_SKU" -> 409;
+            case "INVALID_PRODUCT_DATA" -> 400;
+            default -> 500;
         };
     }
 }
+
+public record ErrorResponse(String errorCode, String message) {}
 ```
 
 ## テスト設計
@@ -1829,603 +1153,528 @@ public class ProductCatalogExceptionMapper implements ExceptionMapper<Exception>
 ### 単体テスト
 
 ```java
-// ProductService テスト
-@ExtendWith(MockitoExtension.class)
+@QuarkusTest
 class ProductServiceTest {
     
-    @InjectMocks
-    private ProductService productService;
+    @Inject
+    ProductService productService;
     
-    @Mock
-    private ProductRepository productRepository;
-    
-    @Mock
-    private CategoryRepository categoryRepository;
-    
-    @Mock
-    private BrandRepository brandRepository;
-    
-    @Mock
-    private ProductEventPublisher eventPublisher;
+    @InjectMock
+    ProductEventPublisher eventPublisher;
     
     @Test
-    @DisplayName("有効な商品データで商品が正常に作成される")
-    void shouldCreateProduct_WhenValidData() {
+    @Transactional
+    void testCreateProduct_Success() {
         // Given
-        var categoryId = UUID.randomUUID();
-        var brandId = UUID.randomUUID();
-        
-        var category = new Category();
-        category.setId(categoryId);
-        category.setName("スキー");
-        
-        var brand = new Brand();
-        brand.setId(brandId);
-        brand.setName("TestBrand");
-        
-        var request = new ProductCreateRequest(
+        ProductCreateRequest request = new ProductCreateRequest(
             "SKI-TEST-001",
             "テストスキー",
-            "テスト用のスキーです",
-            categoryId,
-            brandId,
-            new ProductSpecification(
-                Material.COMPOSITE,
-                SkiType.CARVING,
-                DifficultyLevel.INTERMEDIATE,
-                "165cm",
-                "75mm",
-                "2.8kg",
-                "14m",
-                "MEDIUM",
-                Map.of()
-            ),
-            Set.of("テスト", "カービング"),
-            new ProductStatus(
-                PublishStatus.DRAFT,
-                true,
-                false,
-                false,
-                null,
-                null
-            )
+            "SKI_BOARD",
+            "Rossignol",
+            "SKI_BOARD",
+            new BigDecimal("50000"),
+            "160-170cm",
+            "INTERMEDIATE",
+            "テスト用スキー",
+            "https://example.com/image.jpg"
         );
         
-        when(productRepository.findBySku(request.sku())).thenReturn(Optional.empty());
-        when(categoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
-        when(brandRepository.findById(brandId)).thenReturn(Optional.of(brand));
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
-            var product = (Product) invocation.getArgument(0);
-            product.setId(UUID.randomUUID());
-            return product;
-        });
-        
         // When
-        var result = productService.createProduct(request);
+        Product result = productService.createProduct(request);
         
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getSku()).isEqualTo(request.sku());
-        assertThat(result.getName()).isEqualTo(request.name());
-        assertThat(result.getCategory().getId()).isEqualTo(categoryId);
+        assertThat(result.sku).isEqualTo("SKI-TEST-001");
+        assertThat(result.name).isEqualTo("テストスキー");
+        assertThat(result.isActive).isTrue();
         
-        verify(productRepository).save(any(Product.class));
-        verify(eventPublisher).publish(any(ProductCreatedEvent.class));
+        verify(eventPublisher).publishProductCreated(any(Product.class));
     }
     
     @Test
-    @DisplayName("重複SKUで商品作成時に例外が発生する")
-    void shouldThrowException_WhenDuplicateSku() {
+    void testCreateProduct_DuplicateSku() {
         // Given
-        var request = new ProductCreateRequest(
-            "SKI-EXISTING-001",
+        ProductCreateRequest request = new ProductCreateRequest(
+            "SKI-EXISTING-001", // 既存のSKU
             "テストスキー",
-            "テスト用のスキーです",
-            UUID.randomUUID(),
-            UUID.randomUUID(),
-            new ProductSpecification(
-                Material.COMPOSITE,
-                SkiType.CARVING,
-                DifficultyLevel.INTERMEDIATE,
-                "165cm",
-                "75mm",
-                "2.8kg",
-                "14m",
-                "MEDIUM",
-                Map.of()
-            ),
-            Set.of(),
-            new ProductStatus(PublishStatus.DRAFT, true, false, false, null, null)
+            "SKI_BOARD",
+            "Rossignol",
+            "SKI_BOARD", 
+            new BigDecimal("50000"),
+            "160-170cm",
+            "INTERMEDIATE",
+            "テスト用スキー",
+            "https://example.com/image.jpg"
         );
-        
-        var existingProduct = new Product();
-        when(productRepository.findBySku(request.sku())).thenReturn(Optional.of(existingProduct));
         
         // When & Then
         assertThatThrownBy(() -> productService.createProduct(request))
             .isInstanceOf(DuplicateSkuException.class)
-            .hasMessageContaining("既に使用されています");
-        
-        verify(productRepository, never()).save(any(Product.class));
+            .hasMessageContaining("SKU already exists");
     }
 }
+```
 
-// 検索テスト
-@ExtendWith(MockitoExtension.class)
-class ProductSearchServiceTest {
-    
-    @InjectMocks
-    private ProductSearchService searchService;
-    
-    @Mock
-    private ElasticsearchClient elasticsearchClient;
+### 統合テスト
+
+```java
+@QuarkusTest
+@TestMethodOrder(OrderAnnotation.class)
+class ProductResourceTest {
     
     @Test
-    @DisplayName("キーワード検索が正常に実行される")
-    void shouldSearchProducts_WhenKeywordProvided() throws Exception {
-        // Given
-        var query = new ProductSearchQuery(
-            "カービング",
-            null, null, null, null,
-            null, null, null, null,
-            false, false,
-            ProductSearchSort.RELEVANCE,
-            1, 20
+    @Order(1)
+    void testCreateProduct() {
+        ProductCreateRequest request = new ProductCreateRequest(
+            "SKI-INTEGRATION-001",
+            "統合テストスキー",
+            "SKI_BOARD",
+            "Atomic",
+            "SKI_BOARD",
+            new BigDecimal("60000"),
+            "165cm",
+            "ADVANCED",
+            "統合テスト用",
+            null
         );
         
-        var mockResponse = createMockSearchResponse();
-        when(elasticsearchClient.search(any(SearchRequest.class), eq(ProductSearchDocument.class)))
-            .thenReturn(mockResponse);
+        given()
+            .contentType(ContentType.JSON)
+            .body(request)
+        .when()
+            .post("/api/products")
+        .then()
+            .statusCode(201)
+            .body("sku", equalTo("SKI-INTEGRATION-001"))
+            .body("name", equalTo("統合テストスキー"));
+    }
+    
+    @Test
+    @Order(2)
+    void testGetProducts() {
+        given()
+        .when()
+            .get("/api/products")
+        .then()
+            .statusCode(200)
+            .body("size()", greaterThan(0));
+    }
+}
+```
+
+### Event発行テスト
+
+```java
+@QuarkusTest
+class ProductEventPublisherTest {
+    
+    @Inject
+    ProductEventPublisher eventPublisher;
+    
+    @Channel("product-events-out")
+    TestEmitter<ProductEvent> eventEmitter;
+    
+    @Test
+    void testPublishProductCreatedEvent() {
+        // Given
+        Product product = new Product();
+        product.id = UUID.randomUUID();
+        product.sku = "SKI-EVENT-001";
+        product.name = "イベントテストスキー";
         
         // When
-        var result = searchService.searchProducts(query);
+        eventPublisher.publishProductCreated(product);
         
         // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getProducts()).isNotEmpty();
-        assertThat(result.getTotal()).isGreaterThan(0);
-        
-        verify(elasticsearchClient).search(any(SearchRequest.class), eq(ProductSearchDocument.class));
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            assertThat(eventEmitter.getMessages()).hasSize(1);
+            ProductEvent event = eventEmitter.getMessages().get(0);
+            assertThat(event.getEventType()).isEqualTo("PRODUCT_CREATED");
+            assertThat(event.getAggregateId()).isEqualTo(product.id);
+        });
     }
 }
 ```
 
 ## ローカル開発環境
 
-### Docker Compose設定
+### 開発環境セットアップ
+
+#### 前提条件
+
+- Java 21 LTS
+- Maven 3.9+
+- Docker & Docker Compose
+- Apache Kafka (開発環境)
+
+#### Docker Compose設定
 
 ```yaml
 # docker-compose.yml
-version: '3.9'
-
+version: '3.8'
 services:
-  product-catalog:
+  product-catalog-service:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: src/main/docker/Dockerfile.jvm
     ports:
-      - "8082:8082"
-      - "9992:9990"  # WildFly Admin Console
+      - "8083:8083"
     environment:
-      - DATABASE_URL=jdbc:postgresql://postgres:5432/product_db
-      - DATABASE_USER=product_service
-      - DATABASE_PASSWORD=product_pass
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - REDIS_URL=redis://redis:6379
+      - QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://postgres:5432/product_catalog
+      - QUARKUS_DATASOURCE_USERNAME=product_user
+      - QUARKUS_DATASOURCE_PASSWORD=product_pass
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - AZURE_STORAGE_CONNECTION_STRING=UseDevelopmentStorage=true
-      - LOG_LEVEL=DEBUG
-    volumes:
-      - ./src:/app/src
-      - ./config:/app/config
-      - product_logs:/app/logs
     depends_on:
       - postgres
-      - elasticsearch
-      - redis
       - kafka
-      - azurite
     networks:
       - ski-shop-network
 
   postgres:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_DB=product_db
-      - POSTGRES_USER=product_service
+      - POSTGRES_DB=product_catalog
+      - POSTGRES_USER=product_user
       - POSTGRES_PASSWORD=product_pass
     ports:
-      - "5434:5432"
+      - "5433:5432"
     volumes:
       - postgres_product_data:/var/lib/postgresql/data
       - ./scripts/init-product-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     networks:
       - ski-shop-network
 
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
     environment:
-      - discovery.type=single-node
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - xpack.security.enabled=false
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - ski-shop-network
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.0
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - "5601:5601"
+  kafka:
+    image: confluentinc/cp-kafka:latest
     depends_on:
-      - elasticsearch
-    networks:
-      - ski-shop-network
-
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
+      - zookeeper
     ports:
-      - "6381:6379"
-    volumes:
-      - redis_product_data:/data
-    networks:
-      - ski-shop-network
-
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite
-    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
-    ports:
-      - "10000:10000"  # Blob service
-      - "10001:10001"  # Queue service
-      - "10002:10002"  # Table service
-    volumes:
-      - azurite_data:/data
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
     networks:
       - ski-shop-network
 
 volumes:
   postgres_product_data:
-  elasticsearch_data:
-  redis_product_data:
-  azurite_data:
-  product_logs:
 
 networks:
   ski-shop-network:
     driver: bridge
 ```
 
-このProduct Catalog Serviceの詳細設計書により、高性能な商品検索とカタログ管理機能の実装が可能です。
+#### アプリケーション設定
 
-段階的な書き進めにより、まずはUser Management ServiceとProduct Catalog Serviceの設計書を完成させました。これらの設計書には以下の要素が含まれています：
-
-1. **技術仕様**: Jakarta EE 11、Java 21 LTS、各種ライブラリのバージョン指定
-2. **アーキテクチャ設計**: レイヤードアーキテクチャ、ドメインモデル
-3. **API設計**: OpenAPI 3.1仕様による詳細なAPI定義
-4. **データベース設計**: ERD図、エンティティ設計、Repository設計
-5. **エラー処理**: 統一例外処理、バリデーション
-6. **テスト設計**: 単体テスト、統合テスト例
-7. **ローカル開発環境**: Docker Compose設定
-8. **本番デプロイメント**: Azure Container Apps、CI/CD
-
-## CQRS Commands、Queries、Projections
-
-```java
-// CQRS Commands
-public sealed interface ProductCommand permits 
-    CreateProductCommand, UpdateProductCommand, DeactivateProductCommand, 
-    UpdateProductInventoryCommand {
-}
-
-public record CreateProductCommand(
-    UUID commandId,
-    String sku,
-    String name,
-    String description,
-    String shortDescription,
-    UUID categoryId,
-    String brand,
-    BigDecimal price,
-    BigDecimal costPrice,
-    LocalDateTime timestamp
-) implements ProductCommand {
+```yaml
+# application.yml
+quarkus:
+  application:
+    name: product-catalog-service
+  
+  http:
+    port: 8083
     
-    public CreateProductRequest toRequest() {
-        return new CreateProductRequest(
-            sku, name, description, shortDescription, categoryId,
-            brand, price, costPrice
-        );
-    }
-}
+  datasource:
+    db-kind: postgresql
+    jdbc:
+      url: ${QUARKUS_DATASOURCE_JDBC_URL:jdbc:postgresql://localhost:5433/product_catalog}
+    username: ${QUARKUS_DATASOURCE_USERNAME:product_user}
+    password: ${QUARKUS_DATASOURCE_PASSWORD:product_pass}
+  
+  hibernate-orm:
+    database:
+      generation: update
+    sql-load-script: import.sql
+  
+  log:
+    level: INFO
+    category:
+      "com.ski.shop.catalog": DEBUG
 
-public record UpdateProductCommand(
-    UUID commandId,
-    UUID productId,
-    String name,
-    String description,
-    String shortDescription,
-    String brand,
-    BigDecimal price,
-    BigDecimal costPrice,
-    LocalDateTime timestamp
-) implements ProductCommand {}
+# Kafka設定
+mp:
+  messaging:
+    outgoing:
+      product-events-out:
+        connector: smallrye-kafka
+        topic: product-events
+        value:
+          serializer: io.quarkus.kafka.client.serialization.JsonbSerializer
+        key:
+          serializer: org.apache.kafka.common.serialization.StringSerializer
+        acks: all
+        retries: 3
+        enable-idempotence: true
 
-public record DeactivateProductCommand(
-    UUID commandId,
-    UUID productId,
-    String reason,
-    LocalDateTime timestamp
-) implements ProductCommand {}
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+```
 
-public record UpdateProductInventoryCommand(
-    UUID commandId,
-    String sku,
-    Integer availableQuantity,
-    Integer reservedQuantity,
-    LocalDateTime timestamp
-) implements ProductCommand {}
+#### 開発用データ投入スクリプト
 
-// CQRS Queries
-public sealed interface ProductQuery permits 
-    GetProductByIdQuery, GetProductBySkuQuery, SearchProductsQuery, 
-    GetProductsByCategoryQuery, GetProductStatisticsQuery {
-}
+```sql
+-- import.sql
+-- カテゴリデータ
+INSERT INTO categories (id, name, description, is_active, created_at) VALUES
+('01234567-89ab-cdef-0123-456789abcdef', 'SKI_BOARD', 'スキー板', true, CURRENT_TIMESTAMP),
+('11234567-89ab-cdef-0123-456789abcdef', 'BOOT', 'スキーブーツ', true, CURRENT_TIMESTAMP),
+('21234567-89ab-cdef-0123-456789abcdef', 'POLE', 'ストック', true, CURRENT_TIMESTAMP),
+('31234567-89ab-cdef-0123-456789abcdef', 'HELMET', 'ヘルメット', true, CURRENT_TIMESTAMP);
 
-public record GetProductByIdQuery(
-    UUID queryId,
-    UUID productId,
-    LocalDateTime timestamp
-) implements ProductQuery {}
+-- ブランドデータ
+INSERT INTO brands (id, name, country, description, is_active, created_at) VALUES
+('a1234567-89ab-cdef-0123-456789abcdef', 'Rossignol', 'France', 'フランスの老舗スキーブランド', true, CURRENT_TIMESTAMP),
+('b1234567-89ab-cdef-0123-456789abcdef', 'Atomic', 'Austria', 'オーストリアの革新的スキーメーカー', true, CURRENT_TIMESTAMP),
+('c1234567-89ab-cdef-0123-456789abcdef', 'Salomon', 'France', 'フランスのスポーツ用品メーカー', true, CURRENT_TIMESTAMP);
 
-public record GetProductBySkuQuery(
-    UUID queryId,
-    String sku,
-    LocalDateTime timestamp
-) implements ProductQuery {}
+-- サンプル商品データ
+INSERT INTO products (id, sku, name, category, brand, equipment_type, base_price, size_range, difficulty_level, description, is_active, created_at, updated_at) VALUES
+('p1234567-89ab-cdef-0123-456789abcdef', 'SKI-ROSS-HERO-165', 'Rossignol Hero Athlete FIS GS', 'SKI_BOARD', 'Rossignol', 'SKI_BOARD', 120000.00, '165cm', 'EXPERT', 'World Cup レーシングスキー', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('p2234567-89ab-cdef-0123-456789abcdef', 'SKI-ATOM-REDSTER-170', 'Atomic Redster X9 WC GS', 'SKI_BOARD', 'Atomic', 'SKI_BOARD', 110000.00, '170cm', 'EXPERT', 'World Cup GSスキー', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('p3234567-89ab-cdef-0123-456789abcdef', 'SKI-SAL-SMAX-160', 'Salomon S/Max 8', 'SKI_BOARD', 'Salomon', 'SKI_BOARD', 45000.00, '160cm', 'INTERMEDIATE', '中級者向けオールマウンテンスキー', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+```
 
-public record SearchProductsQuery(
-    UUID queryId,
-    ProductSearchCriteria searchCriteria,
-    int page,
-    int size,
-    LocalDateTime timestamp
-) implements ProductQuery {}
+### 開発モード実行
 
-public record GetProductsByCategoryQuery(
-    UUID queryId,
-    UUID categoryId,
-    int page,
-    int size,
-    LocalDateTime timestamp
-) implements ProductQuery {}
+```bash
+# 開発モードで起動（ホットリロード有効）
+./mvnw quarkus:dev
 
-public record GetProductStatisticsQuery(
-    UUID queryId,
-    LocalDate fromDate,
-    LocalDate toDate,
-    LocalDateTime timestamp
-) implements ProductQuery {}
+# または Docker Composeで起動
+docker-compose up -d
+```
 
-// CQRS Projections
-public record ProductProjection(
-    UUID productId,
-    String sku,
-    String name,
-    String description,
-    String shortDescription,
-    CategoryProjection category,
-    String brand,
-    BigDecimal price,
-    BigDecimal costPrice,
-    ProductStatus status,
-    Integer salesCount,
-    LocalDateTime createdAt,
-    LocalDateTime updatedAt
-) {
-    public static ProductProjection from(Product product) {
-        return new ProductProjection(
-            product.getId(),
-            product.getSku(),
-            product.getName(),
-            product.getDescription(),
-            product.getShortDescription(),
-            CategoryProjection.from(product.getCategory()),
-            product.getBrand(),
-            product.getPrice(),
-            product.getCostPrice(),
-            product.getStatus(),
-            product.getSalesCount(),
-            product.getCreatedAt(),
-            product.getUpdatedAt()
-        );
-    }
-}
+### API テスト
 
-public record CategoryProjection(
-    UUID categoryId,
-    String name,
-    String description
-) {
-    public static CategoryProjection from(Category category) {
-        return new CategoryProjection(
-            category.getId(),
-            category.getName(),
-            category.getDescription()
-        );
-    }
-}
+```bash
+# 商品一覧取得
+curl http://localhost:8083/api/products
 
-public record ProductStatisticsProjection(
-    long totalProducts,
-    long activeProducts,
-    long inactiveProducts,
-    BigDecimal averagePrice,
-    LocalDateTime calculatedAt
-) {}
+# 商品詳細取得
+curl http://localhost:8083/api/products/p1234567-89ab-cdef-0123-456789abcdef
 
-public record ProductSearchCriteria(
-    String keyword,
-    UUID categoryId,
-    String brand,
-    BigDecimal minPrice,
-    BigDecimal maxPrice,
-    ProductStatus status,
-    Boolean inStock
-) {}
-
-// Product Events
-public sealed interface ProductEvent permits 
-    ProductCreatedEvent, ProductUpdatedEvent, ProductPriceChangedEvent, 
-    ProductDeactivatedEvent, ProductInventoryUpdatedEvent, ProductOutOfStockEvent,
-    ProductBackInStockEvent, ProductSoldEvent {
-}
-
-public record ProductCreatedEvent(
-    UUID productId,
-    String sku,
-    String name,
-    BigDecimal price,
-    UUID categoryId,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductUpdatedEvent(
-    UUID productId,
-    String sku,
-    String name,
-    BigDecimal price,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductPriceChangedEvent(
-    String sku,
-    BigDecimal oldPrice,
-    BigDecimal newPrice,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductDeactivatedEvent(
-    UUID productId,
-    String sku,
-    String reason,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductInventoryUpdatedEvent(
-    UUID productId,
-    String sku,
-    Integer availableQuantity,
-    Integer reservedQuantity,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductOutOfStockEvent(
-    UUID productId,
-    String sku,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductBackInStockEvent(
-    UUID productId,
-    String sku,
-    Integer availableQuantity,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-public record ProductSoldEvent(
-    UUID productId,
-    String sku,
-    Integer quantity,
-    UUID orderId,
-    LocalDateTime timestamp
-) implements ProductEvent {}
-
-// External Events
-public record InventoryChangedEvent(
-    String sku,
-    Integer availableQuantity,
-    Integer reservedQuantity,
-    LocalDateTime timestamp
-) {}
-
-public record OrderCreatedEvent(
-    UUID orderId,
-    List<OrderItemDto> orderItems,
-    LocalDateTime timestamp
-) {}
-
-public record OrderItemDto(
-    UUID productId,
-    String sku,
-    String productName,
-    BigDecimal unitPrice,
-    Integer quantity
-) {}
-
-// Result Classes
-public record ProductResult(
-    boolean success,
-    UUID productId,
-    String message
-) {}
-
-public record CreateProductRequest(
-    String sku,
-    String name,
-    String description,
-    String shortDescription,
-    UUID categoryId,
-    String brand,
-    BigDecimal price,
-    BigDecimal costPrice
-) {}
-
-// CQRS Annotations
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface CommandHandler {}
-
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface QueryHandler {}
-
-@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-public @interface EventHandler {}
+# 商品作成
+curl -X POST http://localhost:8083/api/products \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku": "SKI-TEST-001",
+    "name": "テストスキー",
+    "category": "SKI_BOARD",
+    "brand": "Rossignol",
+    "equipmentType": "SKI_BOARD",
+    "basePrice": 50000,
+    "sizeRange": "165cm",
+    "difficultyLevel": "INTERMEDIATE",
+    "description": "テスト用スキー"
+  }'
 ```
 
 ## 本番デプロイメント {#production-deployment}
 
-### Azure Container Apps設定
+### Kubernetes デプロイメント
 
-本番環境でのProduct Catalog Serviceのデプロイメント設定を定義します。
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-catalog-service
+  labels:
+    app: product-catalog-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: product-catalog-service
+  template:
+    metadata:
+      labels:
+        app: product-catalog-service
+    spec:
+      containers:
+      - name: product-catalog-service
+        image: ski-shop/product-catalog-service:latest
+        ports:
+        - containerPort: 8083
+        env:
+        - name: QUARKUS_DATASOURCE_JDBC_URL
+          value: "jdbc:postgresql://postgres-service:5432/product_catalog"
+        - name: QUARKUS_DATASOURCE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: username
+        - name: QUARKUS_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-service:9092"
+        livenessProbe:
+          httpGet:
+            path: /q/health/live
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /q/health/ready
+            port: 8083
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
 
-### CI/CD Pipeline
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-catalog-service
+spec:
+  selector:
+    app: product-catalog-service
+  ports:
+  - port: 8083
+    targetPort: 8083
+  type: ClusterIP
+```
 
-継続的インテグレーション・デプロイメントのパイプライン設定を提供します。
+### 本番環境設定
+
+```yaml
+# application-prod.yml
+quarkus:
+  log:
+    level: WARN
+    category:
+      "com.ski.shop.catalog": INFO
+  
+  datasource:
+    jdbc:
+      min-size: 5
+      max-size: 20
+      acquisition-timeout: 10s
+  
+  hibernate-orm:
+    database:
+      generation: validate
+    sql-load-script: no-file
+
+mp:
+  messaging:
+    outgoing:
+      product-events-out:
+        acks: all
+        retries: 5
+        batch-size: 100
+        linger-ms: 5
+        compression-type: snappy
+```
 
 ## 監視・運用 {#monitoring-operations}
 
-### メトリクス収集
-
-MicroProfile Metricsを使用したメトリクス収集とモニタリング設定。
-
 ### ヘルスチェック
 
-システムの健全性を監視するためのヘルスチェック実装。
+```java
+@ApplicationScoped
+public class ProductCatalogHealthCheck implements HealthCheck {
+    
+    @Inject
+    AgroalDataSource dataSource;
+    
+    @Inject
+    @Channel("product-events-out")
+    Emitter<ProductEvent> eventEmitter;
+    
+    @Override
+    public HealthCheckResponse call() {
+        HealthCheckResponseBuilder builder = HealthCheckResponse.named("product-catalog-service");
+        
+        try {
+            // データベース接続確認
+            checkDatabaseConnection();
+            
+            // Kafka接続確認
+            checkKafkaConnection();
+            
+            builder.up();
+        } catch (Exception e) {
+            builder.down().withData("error", e.getMessage());
+        }
+        
+        return builder.build();
+    }
+    
+    private void checkDatabaseConnection() throws SQLException {
+        try (Connection connection = dataSource.getConnection()) {
+            try (PreparedStatement statement = connection.prepareStatement("SELECT 1")) {
+                statement.executeQuery();
+            }
+        }
+    }
+    
+    private void checkKafkaConnection() {
+        // Kafka接続確認ロジック
+        // イベント送信が可能かチェック
+    }
+}
+```
 
-## 障害対応 {#incident-response}
+### メトリクス
 
-### 障害シナリオ
+```java
+@ApplicationScoped
+public class ProductMetrics {
+    
+    @Inject
+    @Metric(name = "products_created_total")
+    Counter productsCreated;
+    
+    @Inject
+    @Metric(name = "products_updated_total")
+    Counter productsUpdated;
+    
+    @Inject
+    @Metric(name = "product_events_published_total")
+    Counter eventsPublished;
+    
+    @Inject
+    @Metric(name = "product_processing_duration")
+    Timer processingDuration;
+    
+    public void recordProductCreated() {
+        productsCreated.increment();
+    }
+    
+    public void recordProductUpdated() {
+        productsUpdated.increment();
+    }
+    
+    public void recordEventPublished() {
+        eventsPublished.increment();
+    }
+    
+    public Timer.Sample startProcessingTimer() {
+        return Timer.start(processingDuration);
+    }
+}
+```
 
-一般的な障害パターンと対応手順を定義します。
-
-### 自動復旧機能
-
-システムの自動復旧メカニズムの実装。
+このProduct Catalog Serviceの詳細設計書により、Event-Driven Architectureを活用した高性能な商品カタログ管理システムの実装が可能です。
