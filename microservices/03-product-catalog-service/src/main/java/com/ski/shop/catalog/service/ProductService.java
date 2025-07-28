@@ -5,6 +5,7 @@ import com.ski.shop.catalog.dto.*;
 import io.quarkus.cache.CacheResult;
 import io.quarkus.cache.CacheKey;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.NotFoundException;
 import java.util.*;
@@ -15,6 +16,9 @@ import java.util.stream.Collectors;
  */
 @ApplicationScoped
 public class ProductService {
+
+    @Inject
+    ProductEventPublisher eventPublisher;
 
     /**
      * 商品一覧を検索条件に基づいて取得
@@ -279,6 +283,10 @@ public class ProductService {
         }
 
         product.persist();
+        
+        // イベント発行
+        eventPublisher.publishProductCreated(product);
+        
         return toProductResponse(product);
     }
 
@@ -298,6 +306,9 @@ public class ProductService {
             throw new IllegalArgumentException("SKU already exists: " + request.getSku());
         }
 
+        // 更新前の状態を保存（イベント発行のため）
+        Product oldProduct = cloneProduct(product);
+
         product.sku = request.getSku();
         product.name = request.getName();
         product.description = request.getDescription();
@@ -315,6 +326,12 @@ public class ProductService {
         }
 
         product.persist();
+        
+        // 変更がある場合のみイベント発行
+        if (hasChanges(oldProduct, product)) {
+            eventPublisher.publishProductUpdated(oldProduct, product);
+        }
+        
         return toProductResponse(product);
     }
 
@@ -328,7 +345,11 @@ public class ProductService {
             throw new NotFoundException("Product not found: " + productId);
         }
 
+        String sku = product.sku;
         product.delete();
+        
+        // イベント発行
+        eventPublisher.publishProductDeleted(productId, sku);
     }
 
     // プライベートメソッド
@@ -426,5 +447,55 @@ public class ProductService {
                 product.createdAt,
                 product.updatedAt
         );
+    }
+    
+    /**
+     * 商品を複製（更新前の状態保存用）
+     */
+    private Product cloneProduct(Product original) {
+        Product clone = new Product();
+        clone.id = original.id;
+        clone.sku = original.sku;
+        clone.name = original.name;
+        clone.description = original.description;
+        clone.shortDescription = original.shortDescription;
+        clone.category = original.category;
+        clone.brand = original.brand;
+        clone.material = original.material;
+        clone.skiType = original.skiType;
+        clone.difficultyLevel = original.difficultyLevel;
+        clone.length = original.length;
+        clone.width = original.width;
+        clone.weight = original.weight;
+        clone.radius = original.radius;
+        clone.flex = original.flex;
+        clone.publishStatus = original.publishStatus;
+        clone.isActive = original.isActive;
+        clone.isFeatured = original.isFeatured;
+        clone.isDiscontinued = original.isDiscontinued;
+        clone.publishedAt = original.publishedAt;
+        clone.discontinuedAt = original.discontinuedAt;
+        clone.basePrice = original.basePrice;
+        clone.salePrice = original.salePrice;
+        clone.costPrice = original.costPrice;
+        clone.tags = new HashSet<>(original.tags);
+        clone.additionalSpecs = new HashMap<>(original.additionalSpecs);
+        clone.salesCount = original.salesCount;
+        clone.viewCount = original.viewCount;
+        clone.createdAt = original.createdAt;
+        clone.updatedAt = original.updatedAt;
+        return clone;
+    }
+    
+    /**
+     * 商品に変更があったかチェック
+     */
+    private boolean hasChanges(Product oldProduct, Product newProduct) {
+        return !oldProduct.name.equals(newProduct.name) ||
+               !oldProduct.description.equals(newProduct.description) ||
+               oldProduct.basePrice.compareTo(newProduct.basePrice) != 0 ||
+               oldProduct.isActive != newProduct.isActive ||
+               !oldProduct.category.id.equals(newProduct.category.id) ||
+               !oldProduct.brand.id.equals(newProduct.brand.id);
     }
 }

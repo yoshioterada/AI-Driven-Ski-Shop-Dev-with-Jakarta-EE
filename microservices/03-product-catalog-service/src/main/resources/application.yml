@@ -86,6 +86,23 @@ quarkus:
     enabled: true
     path: banner.txt
 
+# Messaging Configuration (Kafka)
+mp:
+  messaging:
+    outgoing:
+      product-events-out:
+        connector: smallrye-kafka
+        topic: product-events
+        key.serializer: org.apache.kafka.common.serialization.StringSerializer
+        value.serializer: io.quarkus.kafka.client.serialization.JsonbSerializer
+        enable.idempotence: true
+        retries: 3
+
+# Kafka Bootstrap Servers
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
 # Custom Application Properties
 app:
   product:

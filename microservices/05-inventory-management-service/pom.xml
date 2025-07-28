@@ -36,6 +36,12 @@
             <type>pom</type>
         </dependency>
 
+        <!-- Messaging - Kafka -->
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>smallrye-reactive-messaging-kafka</artifactId>
+        </dependency>
+
         <!-- Database -->
         <dependency>
             <groupId>org.postgresql</groupId>

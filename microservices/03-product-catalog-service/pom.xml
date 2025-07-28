@@ -127,6 +127,12 @@
             <artifactId>quarkus-scheduler</artifactId>
         </dependency>
 
+        <!-- Messaging - Kafka -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-reactive-messaging-kafka</artifactId>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>io.quarkus</groupId>
