@@ -191,8 +191,8 @@ export class ShoppingCartApi {
     } catch (error: unknown) {
       console.error('Clear cart API error:', error);
       if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response: { status: number; data: unknown } };
-        console.error('Error response:', axiosError.response.status, axiosError.response.data);
+        const axiosError = error as { response?: { status: number; data: unknown } };
+        console.error('Error response:', axiosError.response?.status, axiosError.response?.data);
         throw new Error(`API Error: ${axiosError.response.status} - ${JSON.stringify(axiosError.response.data)}`);
       } else if (error && typeof error === 'object' && 'request' in error) {
         const axiosError = error as { request: unknown };
