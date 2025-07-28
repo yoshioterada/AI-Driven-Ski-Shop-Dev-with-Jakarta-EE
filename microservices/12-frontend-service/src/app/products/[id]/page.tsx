@@ -8,6 +8,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { useCartStore } from '@/stores/cartStore';
 import type { Product } from '@/types/product';
 import { getCategoryHierarchy, getCategoryInfoFilterUrl, CategoryInfo } from '@/utils/categoryUtils';
+import InventoryStatus from '@/components/InventoryStatus';
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -330,22 +331,12 @@ export default function ProductDetailPage() {
               </div>
 
               {/* 在庫状況 */}
-              <div className="flex items-center space-x-2">
-                <span
-                  className={`inline-block w-3 h-3 rounded-full ${
-                    product.inventory.status === 'in_stock'
-                      ? 'bg-green-400'
-                      : 'bg-red-400'
-                  }`}
-                ></span>
-                <span className={`font-medium ${
-                  product.inventory.status === 'in_stock'
-                    ? 'text-green-600'
-                    : 'text-red-600'
-                }`}>
-                  {product.inventory.status === 'in_stock' ? '在庫あり' : '在庫切れ'}
-                </span>
-              </div>
+              <InventoryStatus 
+                sku={product.sku} 
+                showDetails={true} 
+                size="md"
+                className="mb-4"
+              />
 
               {/* SKU */}
               <p className="text-sm text-gray-500">

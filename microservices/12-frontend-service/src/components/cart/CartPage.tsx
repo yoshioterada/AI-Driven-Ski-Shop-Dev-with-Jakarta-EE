@@ -18,6 +18,7 @@ import {
 import { MainLayout } from '../layout/MainLayout';
 import { useCartStore } from '../../stores/cartStore';
 import { CartItemResponse } from '../../types/cart';
+import InventoryStatus from '../InventoryStatus';
 
 // カートアイテムコンポーネント
 const CartItemRow = ({ 
@@ -86,7 +87,12 @@ const CartItemRow = ({
             <p className="text-sm text-gray-500 mt-1">
               SKU: {item.sku}
             </p>
-            <p className="text-green-600 text-sm mt-1">在庫あり</p>
+            <div className="mt-1">
+              <InventoryStatus 
+                sku={item.sku} 
+                size="sm"
+              />
+            </div>
             
             {/* 数量変更コントロール */}
             <div className="flex items-center space-x-2 mt-3">

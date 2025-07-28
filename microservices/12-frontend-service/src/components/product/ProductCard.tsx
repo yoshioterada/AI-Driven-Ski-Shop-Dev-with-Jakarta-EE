@@ -9,6 +9,7 @@ import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { Card, CardContent, Button, Badge } from '@/components/ui';
 import { Product } from '@/types/product';
 import { cn } from '@/utils/helpers';
+import InventoryStatus from '@/components/InventoryStatus';
 
 export interface ProductCardProps {
   product: Product;
@@ -209,14 +210,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           </div>
 
           {/* Stock Status */}
-          <p className="text-xs text-gray-500 mb-3">
-            {isOutOfStock
-              ? '在庫切れ'
-              : isLowStock
-              ? `残り${product.inventory.availableQuantity}個`
-              : '在庫あり'
-            }
-          </p>
+          <div className="mb-3">
+            <InventoryStatus 
+              sku={product.sku} 
+              size="sm"
+            />
+          </div>
 
           {/* Detail Button */}
           <div className="flex space-x-2">

@@ -5,18 +5,22 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { 
-  Product, 
+  Product,
   ProductSearchParams, 
   Category, 
   productCatalogApi 
 } from '@/services/api/product-catalog';
+import { 
+  ProductWithInventory,
+  productInventoryIntegrationApi 
+} from '@/services/api/product-inventory-integration';
 
 /**
  * 商品一覧ページのメインコンポーネント
  */
 function ProductsPageContent() {
   const searchParams = useSearchParams();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<ProductWithInventory[]>([]);
   const [mainCategories, setMainCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<Category[]>([]);
   const [selectedMainCategory, setSelectedMainCategory] = useState<string>('');
@@ -136,7 +140,7 @@ function ProductsPageContent() {
         setError(null);
         
         console.log('商品検索フィルター:', filters);
-        const productsData = await productCatalogApi.getProducts(filters);
+        const productsData = await productInventoryIntegrationApi.getProductsWithInventory(filters);
         console.log('取得した商品数:', productsData.length);
         setProducts(productsData);
       } catch (err) {
