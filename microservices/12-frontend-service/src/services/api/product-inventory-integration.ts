@@ -6,12 +6,20 @@
  */
 
 import { Product, ProductSearchParams, productCatalogApi } from './product-catalog';
-import { inventoryManagementApi, InventoryItemResponse } from './inventory-management';
+import { inventoryManagementApi } from './inventory-management';
+import { InventoryItemResponse } from '../../types/inventory';
 
 /**
  * 商品データに在庫情報を追加した拡張型
  */
 export interface ProductWithInventory extends Product {
+  inventory?: {
+    quantity: number;
+    reservedQuantity: number;
+    availableQuantity: number;
+    lowStockThreshold: number;
+    status: 'in_stock' | 'low_stock' | 'out_of_stock' | 'discontinued';
+  };
   realTimeInventory?: InventoryItemResponse;
   inventoryLoaded: boolean;
   inventoryError?: string;
