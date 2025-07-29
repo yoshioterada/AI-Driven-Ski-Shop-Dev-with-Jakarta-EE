@@ -63,6 +63,11 @@ public class Equipment extends PanacheEntity {
     @Column(name = "reserved_quantity", nullable = false)
     public Integer reservedQuantity = 0;
 
+    @NotNull
+    @PositiveOrZero
+    @Column(name = "pending_reservations", nullable = false)
+    public Integer pendingReservations = 0;
+
     @Column(name = "cache_updated_at")
     public LocalDateTime cacheUpdatedAt;
 
@@ -91,6 +96,7 @@ public class Equipment extends PanacheEntity {
         this.dailyRate = dailyRate;
         this.availableQuantity = 0;
         this.reservedQuantity = 0;
+        this.pendingReservations = 0;
         this.isRentalAvailable = true;
         this.isActive = true;
     }
@@ -101,7 +107,9 @@ public class Equipment extends PanacheEntity {
     }
 
     public boolean hasAvailableStock(Integer requiredQuantity) {
-        return isActive && isRentalAvailable && availableQuantity >= requiredQuantity;
+        // Consider both reserved stock and pending reservations
+        int effectiveAvailable = availableQuantity - pendingReservations;
+        return isActive && isRentalAvailable && effectiveAvailable >= requiredQuantity;
     }
 
     public void updateCachedProductInfo(String sku, String name, String category, 
@@ -165,6 +173,7 @@ public class Equipment extends PanacheEntity {
                 ", warehouseId='" + warehouseId + '\'' +
                 ", availableQuantity=" + availableQuantity +
                 ", reservedQuantity=" + reservedQuantity +
+                ", pendingReservations=" + pendingReservations +
                 ", isActive=" + isActive +
                 '}';
     }

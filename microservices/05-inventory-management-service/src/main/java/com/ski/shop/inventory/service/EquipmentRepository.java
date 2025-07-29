@@ -46,6 +46,21 @@ public class EquipmentRepository implements PanacheRepository<Equipment> {
     }
 
     /**
+     * Find equipment by ID with pessimistic lock for updates
+     */
+    @Transactional
+    public Optional<Equipment> findByIdForUpdate(Long equipmentId) {
+        try {
+            Equipment equipment = find("id = ?1 and isActive = true", equipmentId)
+                    .withLock(LockModeType.PESSIMISTIC_WRITE)
+                    .firstResult();
+            return Optional.ofNullable(equipment);
+        } catch (NoResultException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * Find equipment by cached SKU
      */
     public Optional<Equipment> findByCachedSku(String sku) {
