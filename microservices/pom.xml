@@ -14,9 +14,9 @@
     <description>Comprehensive microservices-based ski resort management system</description>
 
     <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         
@@ -31,6 +31,9 @@
         <hibernate.version>6.4.1.Final</hibernate.version>
         <postgresql.version>42.7.1</postgresql.version>
         <h2.version>2.2.224</h2.version>
+        
+        <!-- Messaging -->
+        <smallrye.reactive.messaging.version>4.15.0</smallrye.reactive.messaging.version>
         
         <!-- Security -->
         <jjwt.version>0.12.3</jjwt.version>
@@ -100,6 +103,13 @@
                 <version>${h2.version}</version>
             </dependency>
 
+            <!-- Messaging -->
+            <dependency>
+                <groupId>io.smallrye.reactive</groupId>
+                <artifactId>smallrye-reactive-messaging-kafka</artifactId>
+                <version>${smallrye.reactive.messaging.version}</version>
+            </dependency>
+
             <!-- Security -->
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
@@ -161,9 +171,9 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>${compiler.plugin.version}</version>
                     <configuration>
-                        <source>21</source>
-                        <target>21</target>
-                        <release>21</release>
+                        <source>17</source>
+                        <target>17</target>
+                        <release>17</release>
                         <compilerArgs>
                             <arg>--enable-preview</arg>
                         </compilerArgs>

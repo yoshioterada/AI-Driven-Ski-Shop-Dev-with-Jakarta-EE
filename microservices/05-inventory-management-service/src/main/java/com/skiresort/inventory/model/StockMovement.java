@@ -113,13 +113,17 @@ public class StockMovement {
     }
     
     public Integer getNetQuantityChange() {
-        return switch (movementType) {
-            case INBOUND, RETURN -> quantity;
-            case OUTBOUND, DAMAGE, THEFT -> -quantity;
-            case ADJUSTMENT -> newQuantity != null && previousQuantity != null ? 
+        switch (movementType) {
+            case INBOUND: 
+            case RETURN: return quantity;
+            case OUTBOUND: 
+            case DAMAGE: 
+            case THEFT: return -quantity;
+            case ADJUSTMENT: return newQuantity != null && previousQuantity != null ? 
                 newQuantity - previousQuantity : 0;
-            case TRANSFER -> 0; // Transfer handled separately
-        };
+            case TRANSFER: return 0; // Transfer handled separately
+            default: return 0;
+        }
     }
     
     // Getter and Setter methods

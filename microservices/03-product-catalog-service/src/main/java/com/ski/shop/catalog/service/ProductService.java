@@ -355,16 +355,16 @@ public class ProductService {
     // プライベートメソッド
 
     private String getOrderByClause(String sortBy) {
-        return switch (sortBy != null ? sortBy : "created_desc") {
-            case "name_asc" -> "p.name ASC";
-            case "name_desc" -> "p.name DESC";
-            case "price_asc" -> "p.basePrice ASC";
-            case "price_desc" -> "p.basePrice DESC";
-            case "created_asc" -> "p.createdAt ASC";
-            case "created_desc" -> "p.createdAt DESC";
-            case "popularity" -> "p.salesCount DESC";
-            default -> "p.createdAt DESC";
-        };
+        switch (sortBy != null ? sortBy : "created_desc") {
+            case "name_asc": return "p.name ASC";
+            case "name_desc": return "p.name DESC";
+            case "price_asc": return "p.basePrice ASC";
+            case "price_desc": return "p.basePrice DESC";
+            case "created_asc": return "p.createdAt ASC";
+            case "created_desc": return "p.createdAt DESC";
+            case "popularity": return "p.salesCount DESC";
+            default: return "p.createdAt DESC";
+        }
     }
 
     private ProductSummaryResponse toProductSummaryResponse(Product product) {

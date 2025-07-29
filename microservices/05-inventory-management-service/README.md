@@ -39,7 +39,7 @@ Product Catalog Serviceから以下のイベントを自動消費：
 
 ## 技術仕様
 
-- **Java**: 21 LTS
+- **Java**: 17 LTS
 - **Framework**: Jakarta EE 11
 - **Application Server**: WildFly 31.0.1
 - **Database**: PostgreSQL 16
@@ -67,7 +67,7 @@ Equipment テーブルは段階的移行をサポート：
 
 ### 前提条件
 
-- Java 21 LTS
+- Java 17 LTS
 - Maven 3.9+
 - Docker & Docker Compose
 - PostgreSQL 16+

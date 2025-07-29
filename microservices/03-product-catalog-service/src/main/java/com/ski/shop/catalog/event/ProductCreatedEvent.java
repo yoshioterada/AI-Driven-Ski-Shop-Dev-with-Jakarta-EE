@@ -50,21 +50,21 @@ public class ProductCreatedEvent extends ProductEvent {
     // Helper methods
     private String mapToEquipmentType(SkiType skiType) {
         // Product Catalog の SkiType を Inventory の EquipmentType にマッピング
-        return switch (skiType) {
-            case SKI_BOARD -> "SKI_BOARD";
-            case BINDING -> "BINDING";
-            case POLE -> "POLE";
-            case BOOT -> "BOOT";
-            case HELMET -> "HELMET";
-            case PROTECTOR -> "PROTECTOR";
-            case WEAR -> "WEAR";
-            case GOGGLE -> "GOGGLE";
-            case GLOVE -> "GLOVE";
-            case BAG -> "BAG";
-            case WAX -> "WAX";
-            case TUNING -> "TUNING";
-            default -> "OTHER";
-        };
+        switch (skiType) {
+            case SKI_BOARD: return "SKI_BOARD";
+            case BINDING: return "BINDING";
+            case POLE: return "POLE";
+            case BOOT: return "BOOT";
+            case HELMET: return "HELMET";
+            case PROTECTOR: return "PROTECTOR";
+            case WEAR: return "WEAR";
+            case GOGGLE: return "GOGGLE";
+            case GLOVE: return "GLOVE";
+            case BAG: return "BAG";
+            case WAX: return "WAX";
+            case TUNING: return "TUNING";
+            default: return "OTHER";
+        }
     }
     
     private String buildSizeRange(Product product) {

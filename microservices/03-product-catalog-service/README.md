@@ -26,7 +26,7 @@ Product Catalog Serviceは、Event-Driven Architectureの中核として機能�
 
 ## 技術仕様
 
-- **Java**: 21 LTS
+- **Java**: 17 LTS
 - **Framework**: Quarkus 3.8.1
 - **Database**: PostgreSQL 16
 - **Message Queue**: Apache Kafka 3.7
@@ -37,7 +37,7 @@ Product Catalog Serviceは、Event-Driven Architectureの中核として機能�
 
 ### 前提条件
 
-- Java 21 LTS
+- Java 17 LTS
 - Docker & Docker Compose
 - Maven 3.9+
 

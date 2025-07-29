@@ -250,10 +250,10 @@ public class InventoryService {
         
         // 移動タイプに応じて在庫を更新
         switch (request.movementType()) {
-            case INBOUND -> {
+            case INBOUND:
                 item.setAvailableQuantity(item.getAvailableQuantity() + request.quantity());
-            }
-            case OUTBOUND -> {
+                break;
+            case OUTBOUND:
                 if (item.getAvailableQuantity() < request.quantity()) {
                     throw new InsufficientStockException(
                         request.sku(), 
@@ -262,11 +262,12 @@ public class InventoryService {
                     );
                 }
                 item.setAvailableQuantity(item.getAvailableQuantity() - request.quantity());
-            }
-            case ADJUSTMENT -> {
+                break;
+            case ADJUSTMENT:
                 item.setAvailableQuantity(request.quantity());
-            }
-            default -> throw new UnsupportedOperationException("未対応の移動タイプ: " + request.movementType());
+                break;
+            default:
+                throw new UnsupportedOperationException("未対応の移動タイプ: " + request.movementType());
         }
         
         // 保存

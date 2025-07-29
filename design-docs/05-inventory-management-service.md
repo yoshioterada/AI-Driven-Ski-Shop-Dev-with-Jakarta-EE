@@ -45,7 +45,7 @@ Inventory Management Serviceは、スキー用品レンタルショップの設�
 
 | 技術領域 | 技術/ライブラリ | バージョン | 用途 |
 |---------|----------------|-----------|------|
-| **Runtime** | OpenJDK | 21 LTS | Java実行環境 |
+| **Runtime** | OpenJDK | 17 LTS | Java実行環境 |
 | **Framework** | Jakarta EE | 11 | エンタープライズフレームワーク |
 | **Application Server** | WildFly | 31.0.1 | Jakarta EEアプリケーションサーバー |
 | **Persistence** | Hibernate ORM | 6.4 | ORM |
@@ -66,13 +66,13 @@ Inventory Management Serviceは、スキー用品レンタルショップの設�
 - **Redis**: キャッシュ機能はJPA level 2 cacheで代替
 - **InfluxDB**: 履歴データはPostgreSQLで管理
 
-### Java 21 LTS 活用機能
+### Java 17 LTS 活用機能
 
-- **Virtual Threads**: 高い並行性を持つイベント処理とレンタル処理
-- **Record Classes**: 設備データ転送オブジェクトとイベントクラス
-- **Pattern Matching**: 設備タイプ別の料金計算ロジック
+- **Records**: 設備データ転送オブジェクトとイベントクラス
+- **Pattern Matching for instanceof**: 設備タイプ別の料金計算ロジック
 - **Text Blocks**: 複雑なSQL定義とJSONテンプレート
 - **Sealed Classes**: イベントタイプとレンタル状態の型安全性
+- **Stream API**: 効率的なデータ処理とフィルタリング
 
 ## Event-Driven Architecture
 

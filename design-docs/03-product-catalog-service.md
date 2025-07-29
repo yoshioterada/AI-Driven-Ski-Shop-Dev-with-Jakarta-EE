@@ -44,7 +44,7 @@ Product Catalog Serviceは、スキー用品販売ショップサイトの商品
 
 | 技術領域 | 技術/ライブラリ | バージョン | 用途 |
 |---------|----------------|-----------|------|
-| **Runtime** | OpenJDK | 21 LTS | Java実行環境 |
+| **Runtime** | OpenJDK | 17 LTS | Java実行環境 |
 | **Framework** | Quarkus | 3.8.1 | マイクロサービスフレームワーク |
 | **Persistence** | Hibernate ORM | 6.4 | ORM |
 | **Data Access** | JPA | 3.2 | データアクセス |
@@ -64,13 +64,13 @@ Product Catalog Serviceは、スキー用品販売ショップサイトの商品
 - **Elasticsearch**: 検索機能は簡素化し、PostgreSQLベースの検索を採用
 - **Redis**: キャッシュ機能は他サービスで管理
 
-### Java 21 LTS 活用機能
+### Java 17 LTS 活用機能
 
-- **Virtual Threads**: 高い並行性を持つイベント処理
-- **Record Classes**: 商品データ転送オブジェクトとイベントクラス
-- **Pattern Matching**: 商品タイプ別の処理分岐
+- **Records**: 商品データ転送オブジェクトとイベントクラス
+- **Pattern Matching for instanceof**: 商品タイプ別の処理分岐
 - **Text Blocks**: 複雑なSQL定義とJSONテンプレート
 - **Sealed Classes**: イベントタイプの型安全性
+- **Stream API**: 効率的なデータ処理とフィルタリング
 
 ## Event-Driven Architecture
 
@@ -1301,7 +1301,7 @@ class ProductEventPublisherTest {
 
 #### 前提条件
 
-- Java 21 LTS
+- Java 17 LTS
 - Maven 3.9+
 - Docker & Docker Compose
 - Apache Kafka (開発環境)

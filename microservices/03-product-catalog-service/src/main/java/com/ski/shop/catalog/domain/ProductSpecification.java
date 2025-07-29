@@ -21,12 +21,13 @@ public record ProductSpecification(
      * スキーヤープロファイルとの互換性チェック
      */
     public boolean isCompatibleWith(SkierProfile profile) {
-        return switch (difficultyLevel) {
-            case BEGINNER -> profile.level() == SkierLevel.BEGINNER || profile.level() == SkierLevel.INTERMEDIATE;
-            case INTERMEDIATE -> profile.level() != SkierLevel.EXPERT;
-            case ADVANCED -> profile.level() == SkierLevel.EXPERT || profile.level() == SkierLevel.ADVANCED;
-            case EXPERT -> profile.level() == SkierLevel.EXPERT;
-        };
+        switch (difficultyLevel) {
+            case BEGINNER: return profile.level() == SkierLevel.BEGINNER || profile.level() == SkierLevel.INTERMEDIATE;
+            case INTERMEDIATE: return profile.level() != SkierLevel.EXPERT;
+            case ADVANCED: return profile.level() == SkierLevel.EXPERT || profile.level() == SkierLevel.ADVANCED;
+            case EXPERT: return profile.level() == SkierLevel.EXPERT;
+            default: return false;
+        }
     }
     
     /**

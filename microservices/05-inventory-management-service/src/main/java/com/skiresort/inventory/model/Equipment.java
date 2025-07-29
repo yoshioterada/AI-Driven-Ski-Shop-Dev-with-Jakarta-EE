@@ -151,15 +151,15 @@ public class Equipment {
         
         BigDecimal rate = basePrice.multiply(BigDecimal.valueOf(0.1)); // 基本10%
         
-        return switch (equipmentType) {
-            case "SKI_BOARD" -> rate.multiply(BigDecimal.valueOf(1.2)); // 20%増し
-            case "BOOT" -> rate.multiply(BigDecimal.valueOf(1.1)); // 10%増し
-            case "HELMET" -> rate.multiply(BigDecimal.valueOf(0.8)); // 20%減
-            case "POLE" -> rate.multiply(BigDecimal.valueOf(0.6)); // 40%減
-            case "GOGGLE" -> rate.multiply(BigDecimal.valueOf(0.5)); // 50%減
-            case "GLOVE" -> rate.multiply(BigDecimal.valueOf(0.4)); // 60%減
-            default -> rate;
-        };
+        switch (equipmentType) {
+            case "SKI_BOARD": return rate.multiply(BigDecimal.valueOf(1.2)); // 20%増し
+            case "BOOT": return rate.multiply(BigDecimal.valueOf(1.1)); // 10%増し
+            case "HELMET": return rate.multiply(BigDecimal.valueOf(0.8)); // 20%減
+            case "POLE": return rate.multiply(BigDecimal.valueOf(0.6)); // 40%減
+            case "GOGGLE": return rate.multiply(BigDecimal.valueOf(0.5)); // 50%減
+            case "GLOVE": return rate.multiply(BigDecimal.valueOf(0.4)); // 60%減
+            default: return rate;
+        }
     }
     
     /**
