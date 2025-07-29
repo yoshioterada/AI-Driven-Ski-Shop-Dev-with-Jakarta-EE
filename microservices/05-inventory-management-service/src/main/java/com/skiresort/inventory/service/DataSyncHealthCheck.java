@@ -32,26 +32,12 @@ public class DataSyncHealthCheck implements HealthCheck {
             DataSyncStatus status = checkDataSync();
             
             if (status.isHealthy()) {
-                return HealthCheckResponse.up("product-inventory-sync")
-                        .withData("status", "healthy")
-                        .withData("last_check", LocalDateTime.now().toString())
-                        .withData("total_equipment", String.valueOf(status.getTotalEquipment()))
-                        .withData("cache_issues", String.valueOf(status.getCacheIssues()))
-                        .build();
+                return HealthCheckResponse.up("product-inventory-sync");
             } else {
-                return HealthCheckResponse.down("product-inventory-sync")
-                        .withData("status", "unhealthy")
-                        .withData("last_check", LocalDateTime.now().toString())
-                        .withData("total_equipment", String.valueOf(status.getTotalEquipment()))
-                        .withData("cache_issues", String.valueOf(status.getCacheIssues()))
-                        .withData("stale_cache_count", String.valueOf(status.getStaleCacheCount()))
-                        .build();
+                return HealthCheckResponse.down("product-inventory-sync");
             }
         } catch (Exception e) {
-            return HealthCheckResponse.down("product-inventory-sync")
-                    .withData("status", "error")
-                    .withData("error", e.getMessage())
-                    .build();
+            return HealthCheckResponse.down("product-inventory-sync");
         }
     }
 
