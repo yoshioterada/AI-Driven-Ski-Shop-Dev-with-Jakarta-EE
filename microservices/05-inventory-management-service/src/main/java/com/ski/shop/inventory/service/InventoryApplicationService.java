@@ -5,16 +5,19 @@ import com.ski.shop.inventory.dto.AvailabilityResponse;
 import com.ski.shop.inventory.dto.EquipmentDto;
 import com.ski.shop.inventory.dto.UpdateStockRequest;
 import io.quarkus.cache.CacheResult;
+import io.quarkus.cache.CacheKey;
 import io.quarkus.logging.Log;
 import io.quarkus.panache.common.Page;
+import io.quarkus.redis.datasource.RedisDataSource;
+import io.quarkus.redis.datasource.value.ValueCommands;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -25,6 +28,19 @@ public class InventoryApplicationService {
 
     @Inject
     EquipmentRepository equipmentRepository;
+
+    @Inject
+    RedisDataSource redisDataSource;
+
+    private ValueCommands<String, String> redisCommands;
+    private ObjectMapper objectMapper = new ObjectMapper();
+
+    private static final String CACHE_PREFIX = "inventory:";
+    private static final int CACHE_TTL_SECONDS = 1800; // 30 minutes
+
+    public void init() {
+        this.redisCommands = redisDataSource.value(String.class);
+    }
 
     /**
      * Get equipment list with optional filtering
@@ -210,5 +226,255 @@ public class InventoryApplicationService {
     private boolean filterByType(Equipment equipment, String type) {
         return type == null || type.isEmpty() || 
                (equipment.cachedEquipmentType != null && equipment.cachedEquipmentType.equalsIgnoreCase(type));
+    }
+
+    /**
+     * Advanced equipment list with comprehensive filtering
+     */
+    @CacheResult(cacheName = "equipment-list-advanced")
+    public List<EquipmentDto> getEquipmentListAdvanced(
+            String category, String brand, String warehouseId, String equipmentType,
+            String availabilityStatus, Integer minQuantity, Boolean isActive, 
+            Boolean isRentalAvailable, String minPrice, String maxPrice,
+            String sortBy, String sortDirection, Page page) {
+        
+        Log.debugf("Advanced equipment search with filters");
+        
+        List<Equipment> equipment = equipmentRepository.searchEquipmentAdvanced(
+            category, brand, warehouseId, equipmentType, availabilityStatus,
+            minQuantity, isActive, isRentalAvailable, minPrice, maxPrice,
+            sortBy, sortDirection, page);
+            
+        return equipment.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Advanced equipment search with Redis caching
+     */
+    public List<EquipmentDto> searchEquipmentAdvanced(
+            String sku, String name, String category, String type, String brand,
+            String availabilityStatus, Integer minAvailable, String minPrice, String maxPrice,
+            Boolean hasReservations, Boolean useCache, Page page) {
+        
+        if (redisCommands == null) {
+            init();
+        }
+        
+        String cacheKey = buildSearchCacheKey(sku, name, category, type, brand, 
+                                            availabilityStatus, minAvailable, minPrice, 
+                                            maxPrice, hasReservations, page);
+        
+        if (Boolean.TRUE.equals(useCache)) {
+            try {
+                String cachedResult = redisCommands.get(cacheKey);
+                if (cachedResult != null) {
+                    Log.debugf("Cache hit for search key: %s", cacheKey);
+                    return deserializeEquipmentList(cachedResult);
+                }
+            } catch (Exception e) {
+                Log.warnf("Cache read error: %s", e.getMessage());
+            }
+        }
+        
+        // Execute search
+        List<Equipment> equipment = equipmentRepository.searchEquipmentAdvanced(
+            category, brand, null, type, availabilityStatus,
+            minAvailable, null, null, minPrice, maxPrice,
+            "name", "ASC", page);
+        
+        // Apply additional filters
+        List<EquipmentDto> results = equipment.stream()
+                .filter(eq -> filterBySku(eq, sku))
+                .filter(eq -> filterByName(eq, name))
+                .filter(eq -> filterByBrand(eq, brand))
+                .filter(eq -> filterByReservations(eq, hasReservations))
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        
+        // Cache results if requested
+        if (Boolean.TRUE.equals(useCache)) {
+            try {
+                String serialized = objectMapper.writeValueAsString(results);
+                redisCommands.setex(cacheKey, CACHE_TTL_SECONDS, serialized);
+                Log.debugf("Cached search results for key: %s", cacheKey);
+            } catch (Exception e) {
+                Log.warnf("Cache write error: %s", e.getMessage());
+            }
+        }
+        
+        return results;
+    }
+
+    /**
+     * Get equipment filtered by inventory status with caching
+     */
+    public List<EquipmentDto> getEquipmentByStatus(String status, String warehouseId, 
+                                                 Boolean includeReservations, Boolean useCache, Page page) {
+        
+        if (redisCommands == null) {
+            init();
+        }
+        
+        String cacheKey = CACHE_PREFIX + "status:" + status + ":" + warehouseId + ":" + 
+                         includeReservations + ":" + page.index + ":" + page.size;
+        
+        if (Boolean.TRUE.equals(useCache)) {
+            try {
+                String cachedResult = redisCommands.get(cacheKey);
+                if (cachedResult != null) {
+                    Log.debugf("Cache hit for status key: %s", cacheKey);
+                    return deserializeEquipmentList(cachedResult);
+                }
+            } catch (Exception e) {
+                Log.warnf("Cache read error: %s", e.getMessage());
+            }
+        }
+        
+        // Execute query based on status
+        List<Equipment> equipment = switch (status.toUpperCase()) {
+            case "AVAILABLE" -> equipmentRepository.findAvailableEquipment(warehouseId, page);
+            case "OUT_OF_STOCK" -> equipmentRepository.findOutOfStockEquipment(warehouseId, page);
+            case "LOW_STOCK" -> equipmentRepository.findLowStockEquipment(warehouseId, 5, page); // Threshold of 5
+            case "RESERVED" -> equipmentRepository.findEquipmentWithReservations(warehouseId, page);
+            case "INACTIVE" -> equipmentRepository.findInactiveEquipment(warehouseId, page);
+            default -> equipmentRepository.findActiveEquipment(warehouseId, page);
+        };
+        
+        List<EquipmentDto> results = equipment.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        
+        // Cache results
+        if (Boolean.TRUE.equals(useCache)) {
+            try {
+                String serialized = objectMapper.writeValueAsString(results);
+                redisCommands.setex(cacheKey, CACHE_TTL_SECONDS, serialized);
+                Log.debugf("Cached status results for key: %s", cacheKey);
+            } catch (Exception e) {
+                Log.warnf("Cache write error: %s", e.getMessage());
+            }
+        }
+        
+        return results;
+    }
+
+    /**
+     * Get comprehensive inventory statistics with caching
+     */
+    public Map<String, Object> getInventoryStatistics(String warehouseId, Boolean useCache) {
+        if (redisCommands == null) {
+            init();
+        }
+        
+        String cacheKey = CACHE_PREFIX + "stats:" + (warehouseId != null ? warehouseId : "all");
+        
+        if (Boolean.TRUE.equals(useCache)) {
+            try {
+                String cachedResult = redisCommands.get(cacheKey);
+                if (cachedResult != null) {
+                    Log.debugf("Cache hit for statistics key: %s", cacheKey);
+                    return objectMapper.readValue(cachedResult, Map.class);
+                }
+            } catch (Exception e) {
+                Log.warnf("Cache read error: %s", e.getMessage());
+            }
+        }
+        
+        // Calculate statistics
+        Map<String, Object> stats = new HashMap<>();
+        
+        List<Equipment> allEquipment = warehouseId != null 
+            ? Equipment.find("warehouseId = ?1 and isActive = true", warehouseId).list()
+            : Equipment.find("isActive = true").list();
+        
+        stats.put("total_equipment", allEquipment.size());
+        stats.put("total_available_quantity", allEquipment.stream()
+                .mapToInt(eq -> eq.availableQuantity).sum());
+        stats.put("total_reserved_quantity", allEquipment.stream()
+                .mapToInt(eq -> eq.reservedQuantity).sum());
+        stats.put("total_pending_reservations", allEquipment.stream()
+                .mapToInt(eq -> eq.pendingReservations).sum());
+        
+        long availableItems = allEquipment.stream()
+                .filter(eq -> eq.availableQuantity > 0).count();
+        long outOfStockItems = allEquipment.stream()
+                .filter(eq -> eq.availableQuantity == 0).count();
+        long lowStockItems = allEquipment.stream()
+                .filter(eq -> eq.availableQuantity > 0 && eq.availableQuantity <= 5).count();
+        
+        stats.put("available_items", availableItems);
+        stats.put("out_of_stock_items", outOfStockItems);
+        stats.put("low_stock_items", lowStockItems);
+        
+        // Category breakdown
+        Map<String, Long> categoryBreakdown = allEquipment.stream()
+                .filter(eq -> eq.cachedCategory != null)
+                .collect(Collectors.groupingBy(
+                    eq -> eq.cachedCategory,
+                    Collectors.counting()
+                ));
+        stats.put("category_breakdown", categoryBreakdown);
+        
+        // Value statistics
+        BigDecimal totalInventoryValue = allEquipment.stream()
+                .filter(eq -> eq.cachedBasePrice != null)
+                .map(eq -> eq.cachedBasePrice.multiply(BigDecimal.valueOf(eq.getTotalQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        stats.put("total_inventory_value", totalInventoryValue);
+        
+        stats.put("last_updated", LocalDateTime.now());
+        
+        // Cache results
+        if (Boolean.TRUE.equals(useCache)) {
+            try {
+                String serialized = objectMapper.writeValueAsString(stats);
+                redisCommands.setex(cacheKey, CACHE_TTL_SECONDS / 2, serialized); // Shorter TTL for stats
+                Log.debugf("Cached statistics for key: %s", cacheKey);
+            } catch (Exception e) {
+                Log.warnf("Cache write error: %s", e.getMessage());
+            }
+        }
+        
+        return stats;
+    }
+
+    // Helper methods for caching
+    private String buildSearchCacheKey(String sku, String name, String category, String type, 
+                                     String brand, String availabilityStatus, Integer minAvailable,
+                                     String minPrice, String maxPrice, Boolean hasReservations, Page page) {
+        return CACHE_PREFIX + "search:" + 
+               (sku != null ? sku : "") + ":" +
+               (name != null ? name : "") + ":" +
+               (category != null ? category : "") + ":" +
+               (type != null ? type : "") + ":" +
+               (brand != null ? brand : "") + ":" +
+               (availabilityStatus != null ? availabilityStatus : "") + ":" +
+               (minAvailable != null ? minAvailable : "") + ":" +
+               (minPrice != null ? minPrice : "") + ":" +
+               (maxPrice != null ? maxPrice : "") + ":" +
+               (hasReservations != null ? hasReservations : "") + ":" +
+               page.index + ":" + page.size;
+    }
+
+    private List<EquipmentDto> deserializeEquipmentList(String json) {
+        try {
+            return objectMapper.readValue(json, 
+                objectMapper.getTypeFactory().constructCollectionType(List.class, EquipmentDto.class));
+        } catch (Exception e) {
+            Log.warnf("Failed to deserialize equipment list: %s", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private boolean filterByBrand(Equipment equipment, String brand) {
+        return brand == null || brand.isEmpty() || 
+               (equipment.cachedBrand != null && equipment.cachedBrand.toLowerCase().contains(brand.toLowerCase()));
+    }
+
+    private boolean filterByReservations(Equipment equipment, Boolean hasReservations) {
+        if (hasReservations == null) return true;
+        return hasReservations ? equipment.reservedQuantity > 0 : equipment.reservedQuantity == 0;
     }
 }

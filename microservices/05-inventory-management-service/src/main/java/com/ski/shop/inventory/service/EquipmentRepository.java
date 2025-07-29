@@ -193,4 +193,166 @@ public class EquipmentRepository implements PanacheRepository<Equipment> {
         
         return updatedRows > 0;
     }
+
+    /**
+     * Advanced equipment search with comprehensive filtering and sorting
+     */
+    public List<Equipment> searchEquipmentAdvanced(
+            String category, String brand, String warehouseId, String equipmentType,
+            String availabilityStatus, Integer minQuantity, Boolean isActive, 
+            Boolean isRentalAvailable, String minPrice, String maxPrice,
+            String sortBy, String sortDirection, Page page) {
+        
+        StringBuilder query = new StringBuilder("SELECT e FROM Equipment e WHERE 1=1");
+        
+        // Basic filters
+        if (isActive != null) {
+            query.append(" AND e.isActive = ").append(isActive);
+        } else {
+            query.append(" AND e.isActive = true"); // Default to active only
+        }
+        
+        if (category != null && !category.isEmpty()) {
+            query.append(" AND e.cachedCategory = '").append(category).append("'");
+        }
+        
+        if (brand != null && !brand.isEmpty()) {
+            query.append(" AND e.cachedBrand = '").append(brand).append("'");
+        }
+        
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND e.warehouseId = '").append(warehouseId).append("'");
+        }
+        
+        if (equipmentType != null && !equipmentType.isEmpty()) {
+            query.append(" AND e.cachedEquipmentType = '").append(equipmentType).append("'");
+        }
+        
+        if (isRentalAvailable != null) {
+            query.append(" AND e.isRentalAvailable = ").append(isRentalAvailable);
+        }
+        
+        // Availability status filters
+        if (availabilityStatus != null && !availabilityStatus.isEmpty()) {
+            switch (availabilityStatus.toUpperCase()) {
+                case "AVAILABLE" -> query.append(" AND e.availableQuantity > 0");
+                case "OUT_OF_STOCK" -> query.append(" AND e.availableQuantity = 0");
+                case "LOW_STOCK" -> query.append(" AND e.availableQuantity > 0 AND e.availableQuantity <= 5");
+                case "RESERVED" -> query.append(" AND e.reservedQuantity > 0");
+                case "HAS_PENDING" -> query.append(" AND e.pendingReservations > 0");
+            }
+        }
+        
+        // Quantity filters
+        if (minQuantity != null) {
+            query.append(" AND e.availableQuantity >= ").append(minQuantity);
+        }
+        
+        // Price range filters
+        if (minPrice != null && !minPrice.isEmpty()) {
+            try {
+                query.append(" AND e.dailyRate >= ").append(Double.parseDouble(minPrice));
+            } catch (NumberFormatException e) {
+                // Ignore invalid price
+            }
+        }
+        
+        if (maxPrice != null && !maxPrice.isEmpty()) {
+            try {
+                query.append(" AND e.dailyRate <= ").append(Double.parseDouble(maxPrice));
+            } catch (NumberFormatException e) {
+                // Ignore invalid price
+            }
+        }
+        
+        // Sorting
+        if (sortBy != null && !sortBy.isEmpty()) {
+            String sortField = switch (sortBy.toLowerCase()) {
+                case "name" -> "e.cachedName";
+                case "price" -> "e.dailyRate";
+                case "quantity" -> "e.availableQuantity";
+                case "category" -> "e.cachedCategory";
+                case "brand" -> "e.cachedBrand";
+                case "updated" -> "e.updatedAt";
+                default -> "e.cachedName";
+            };
+            
+            String direction = "DESC".equalsIgnoreCase(sortDirection) ? "DESC" : "ASC";
+            query.append(" ORDER BY ").append(sortField).append(" ").append(direction);
+        } else {
+            query.append(" ORDER BY e.cachedName ASC");
+        }
+        
+        return getEntityManager()
+                .createQuery(query.toString(), Equipment.class)
+                .setFirstResult(page.index * page.size)
+                .setMaxResults(page.size)
+                .getResultList();
+    }
+
+    /**
+     * Find available equipment by warehouse with pagination
+     */
+    public List<Equipment> findAvailableEquipment(String warehouseId, Page page) {
+        StringBuilder query = new StringBuilder("isActive = true AND availableQuantity > 0");
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND warehouseId = '").append(warehouseId).append("'");
+        }
+        return find(query.toString()).page(page).list();
+    }
+
+    /**
+     * Find out of stock equipment with pagination
+     */
+    public List<Equipment> findOutOfStockEquipment(String warehouseId, Page page) {
+        StringBuilder query = new StringBuilder("isActive = true AND availableQuantity = 0");
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND warehouseId = '").append(warehouseId).append("'");
+        }
+        return find(query.toString()).page(page).list();
+    }
+
+    /**
+     * Find low stock equipment with pagination
+     */
+    public List<Equipment> findLowStockEquipment(String warehouseId, Integer threshold, Page page) {
+        StringBuilder query = new StringBuilder("isActive = true AND availableQuantity > 0 AND availableQuantity <= " + threshold);
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND warehouseId = '").append(warehouseId).append("'");
+        }
+        return find(query.toString()).page(page).list();
+    }
+
+    /**
+     * Find equipment with active reservations
+     */
+    public List<Equipment> findEquipmentWithReservations(String warehouseId, Page page) {
+        StringBuilder query = new StringBuilder("isActive = true AND reservedQuantity > 0");
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND warehouseId = '").append(warehouseId).append("'");
+        }
+        return find(query.toString()).page(page).list();
+    }
+
+    /**
+     * Find inactive equipment
+     */
+    public List<Equipment> findInactiveEquipment(String warehouseId, Page page) {
+        StringBuilder query = new StringBuilder("isActive = false");
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND warehouseId = '").append(warehouseId).append("'");
+        }
+        return find(query.toString()).page(page).list();
+    }
+
+    /**
+     * Find active equipment
+     */
+    public List<Equipment> findActiveEquipment(String warehouseId, Page page) {
+        StringBuilder query = new StringBuilder("isActive = true");
+        if (warehouseId != null && !warehouseId.isEmpty()) {
+            query.append(" AND warehouseId = '").append(warehouseId).append("'");
+        }
+        return find(query.toString()).page(page).list();
+    }
 }

@@ -33,18 +33,30 @@ public class InventoryResource {
 
     @GET
     @Path("/equipment")
-    @Operation(summary = "Get equipment list", description = "Retrieve list of equipment with optional filtering")
+    @Operation(summary = "Get equipment list", description = "Retrieve list of equipment with advanced filtering")
     @APIResponse(responseCode = "200", description = "Equipment list retrieved successfully")
     public Response getEquipmentList(
             @Parameter(description = "Category filter") @QueryParam("category") String category,
             @Parameter(description = "Brand filter") @QueryParam("brand") String brand,
             @Parameter(description = "Warehouse ID filter") @QueryParam("warehouseId") String warehouseId,
+            @Parameter(description = "Equipment type filter") @QueryParam("equipmentType") String equipmentType,
+            @Parameter(description = "Availability status filter") @QueryParam("availabilityStatus") String availabilityStatus,
+            @Parameter(description = "Minimum quantity filter") @QueryParam("minQuantity") Integer minQuantity,
+            @Parameter(description = "Active status filter") @QueryParam("isActive") Boolean isActive,
+            @Parameter(description = "Rental available filter") @QueryParam("isRentalAvailable") Boolean isRentalAvailable,
+            @Parameter(description = "Price range min") @QueryParam("minPrice") String minPrice,
+            @Parameter(description = "Price range max") @QueryParam("maxPrice") String maxPrice,
+            @Parameter(description = "Sort field") @QueryParam("sortBy") @DefaultValue("name") String sortBy,
+            @Parameter(description = "Sort direction") @QueryParam("sortDirection") @DefaultValue("ASC") String sortDirection,
             @Parameter(description = "Page number") @QueryParam("page") @DefaultValue("0") int page,
             @Parameter(description = "Page size") @QueryParam("size") @DefaultValue("20") int size) {
         
         try {
             Page pageRequest = Page.of(page, size);
-            List<EquipmentDto> equipment = inventoryService.getEquipmentList(category, brand, warehouseId, pageRequest);
+            List<EquipmentDto> equipment = inventoryService.getEquipmentListAdvanced(
+                category, brand, warehouseId, equipmentType, availabilityStatus,
+                minQuantity, isActive, isRentalAvailable, minPrice, maxPrice,
+                sortBy, sortDirection, pageRequest);
             return Response.ok(equipment).build();
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
@@ -139,19 +151,29 @@ public class InventoryResource {
 
     @GET
     @Path("/equipment/search")
-    @Operation(summary = "Search equipment", description = "Search equipment by various criteria")
+    @Operation(summary = "Advanced equipment search", description = "Search equipment by complex criteria with caching")
     @APIResponse(responseCode = "200", description = "Search results retrieved successfully")
     public Response searchEquipment(
             @Parameter(description = "SKU filter") @QueryParam("sku") String sku,
             @Parameter(description = "Name filter") @QueryParam("name") String name,
             @Parameter(description = "Category filter") @QueryParam("category") String category,
             @Parameter(description = "Equipment type filter") @QueryParam("type") String type,
+            @Parameter(description = "Brand filter") @QueryParam("brand") String brand,
+            @Parameter(description = "Availability status") @QueryParam("availabilityStatus") String availabilityStatus,
+            @Parameter(description = "Minimum available quantity") @QueryParam("minAvailable") Integer minAvailable,
+            @Parameter(description = "Price range min") @QueryParam("minPrice") String minPrice,
+            @Parameter(description = "Price range max") @QueryParam("maxPrice") String maxPrice,
+            @Parameter(description = "Has reservations") @QueryParam("hasReservations") Boolean hasReservations,
+            @Parameter(description = "Cache results") @QueryParam("useCache") @DefaultValue("true") Boolean useCache,
             @Parameter(description = "Page number") @QueryParam("page") @DefaultValue("0") int page,
             @Parameter(description = "Page size") @QueryParam("size") @DefaultValue("20") int size) {
         
         try {
             Page pageRequest = Page.of(page, size);
-            List<EquipmentDto> results = inventoryService.searchEquipment(sku, name, category, type, pageRequest);
+            List<EquipmentDto> results = inventoryService.searchEquipmentAdvanced(
+                sku, name, category, type, brand, availabilityStatus, 
+                minAvailable, minPrice, maxPrice, hasReservations, 
+                useCache, pageRequest);
             return Response.ok(results).build();
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
@@ -166,5 +188,47 @@ public class InventoryResource {
     @APIResponse(responseCode = "200", description = "Service is healthy")
     public Response healthCheck() {
         return Response.ok().entity("Inventory Management Service is running").build();
+    }
+
+    @GET
+    @Path("/equipment/status")
+    @Operation(summary = "Get equipment by inventory status", description = "Retrieve equipment filtered by inventory status with caching")
+    @APIResponse(responseCode = "200", description = "Equipment status information retrieved successfully")
+    public Response getEquipmentByStatus(
+            @Parameter(description = "Inventory status filter") @QueryParam("status") @DefaultValue("ALL") String status,
+            @Parameter(description = "Warehouse ID filter") @QueryParam("warehouseId") String warehouseId,
+            @Parameter(description = "Include reservation details") @QueryParam("includeReservations") @DefaultValue("false") Boolean includeReservations,
+            @Parameter(description = "Use cache") @QueryParam("useCache") @DefaultValue("true") Boolean useCache,
+            @Parameter(description = "Page number") @QueryParam("page") @DefaultValue("0") int page,
+            @Parameter(description = "Page size") @QueryParam("size") @DefaultValue("20") int size) {
+        
+        try {
+            Page pageRequest = Page.of(page, size);
+            List<EquipmentDto> equipment = inventoryService.getEquipmentByStatus(
+                status, warehouseId, includeReservations, useCache, pageRequest);
+            return Response.ok(equipment).build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error retrieving equipment by status: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    @GET
+    @Path("/statistics")
+    @Operation(summary = "Get inventory statistics", description = "Get comprehensive inventory statistics with caching")
+    @APIResponse(responseCode = "200", description = "Statistics retrieved successfully")
+    public Response getInventoryStatistics(
+            @Parameter(description = "Warehouse ID filter") @QueryParam("warehouseId") String warehouseId,
+            @Parameter(description = "Use cache") @QueryParam("useCache") @DefaultValue("true") Boolean useCache) {
+        
+        try {
+            var statistics = inventoryService.getInventoryStatistics(warehouseId, useCache);
+            return Response.ok(statistics).build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                    .entity("Error retrieving inventory statistics: " + e.getMessage())
+                    .build();
+        }
     }
 }

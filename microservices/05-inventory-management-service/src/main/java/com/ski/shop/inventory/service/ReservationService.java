@@ -6,9 +6,13 @@ import com.ski.shop.inventory.dto.CreateReservationRequest;
 import com.ski.shop.inventory.dto.ExtendReservationRequest;
 import com.ski.shop.inventory.dto.ReservationResponse;
 import io.quarkus.logging.Log;
+import io.quarkus.redis.datasource.RedisDataSource;
+import io.quarkus.redis.datasource.value.ValueCommands;
+import io.quarkus.redis.datasource.keys.KeyCommands;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,12 +28,28 @@ public class ReservationService {
 
     // Default reservation timeout in minutes
     private static final int DEFAULT_RESERVATION_TIMEOUT_MINUTES = 30;
+    private static final String RESERVATION_CACHE_PREFIX = "reservation:";
+    private static final String CUSTOMER_RESERVATIONS_CACHE_PREFIX = "customer_reservations:";
+    private static final String EQUIPMENT_RESERVATIONS_CACHE_PREFIX = "equipment_reservations:";
+    private static final int CACHE_TTL_SECONDS = 900; // 15 minutes
 
     @Inject
     EquipmentRepository equipmentRepository;
 
     @Inject
     ReservationEventService reservationEventService;
+
+    @Inject
+    RedisDataSource redisDataSource;
+
+    private ValueCommands<String, String> redisCommands;
+    private io.quarkus.redis.datasource.keys.KeyCommands keyCommands;
+    private ObjectMapper objectMapper = new ObjectMapper();
+
+    public void init() {
+        this.redisCommands = redisDataSource.value(String.class);
+        this.keyCommands = redisDataSource.key();
+    }
 
     /**
      * Create a new stock reservation
@@ -102,14 +122,24 @@ public class ReservationService {
                 equipment.warehouseId
         );
 
+        // Invalidate related caches
+        invalidateCustomerReservationsCache(request.customerId);
+        invalidateEquipmentReservationsCache(request.productId);
+
         return response;
     }
 
     /**
-     * Get reservation details by reservation ID
+     * Get reservation details by reservation ID with caching
      */
     public ReservationResponse getReservation(UUID reservationId) {
         Log.debugf("Getting reservation details for %s", reservationId);
+
+        // Try cache first
+        ReservationResponse cached = getCachedReservation(reservationId);
+        if (cached != null) {
+            return cached;
+        }
 
         StockReservation reservation = StockReservation.findByReservationId(reservationId);
         if (reservation == null) {
@@ -129,6 +159,9 @@ public class ReservationService {
                     equipment.warehouseId
             );
         }
+
+        // Cache the response
+        cacheReservation(response);
 
         return response;
     }
@@ -171,6 +204,16 @@ public class ReservationService {
 
         // Publish reservation confirmed event
         reservationEventService.publishReservationConfirmed(reservation);
+
+        // Invalidate caches
+        invalidateReservationCache(reservationId);
+        invalidateCustomerReservationsCache(reservation.customerId);
+        
+        // Get equipment to invalidate equipment reservations cache
+        Equipment equipmentForCache = equipmentRepository.findById(reservation.equipmentId);
+        if (equipmentForCache != null) {
+            invalidateEquipmentReservationsCache(equipmentForCache.productId);
+        }
 
         return ReservationResponse.fromEntity(reservation);
     }
@@ -225,6 +268,16 @@ public class ReservationService {
         // Publish reservation cancelled event
         reservationEventService.publishReservationCancelled(reservation, reason);
 
+        // Invalidate caches
+        invalidateReservationCache(reservationId);
+        invalidateCustomerReservationsCache(reservation.customerId);
+        
+        // Get equipment to invalidate equipment reservations cache
+        Equipment equipmentForCacheInvalidation = equipmentRepository.findById(reservation.equipmentId);
+        if (equipmentForCacheInvalidation != null) {
+            invalidateEquipmentReservationsCache(equipmentForCacheInvalidation.productId);
+        }
+
         return ReservationResponse.fromEntity(reservation);
     }
 
@@ -260,27 +313,49 @@ public class ReservationService {
     }
 
     /**
-     * Get reservations for a customer
+     * Get reservations for a customer with caching
      */
     public List<ReservationResponse> getCustomerReservations(String customerId) {
         Log.debugf("Getting reservations for customer %s", customerId);
 
+        // Try cache first
+        List<ReservationResponse> cached = getCachedCustomerReservations(customerId);
+        if (cached != null) {
+            return cached;
+        }
+
         List<StockReservation> reservations = StockReservation.findByCustomerId(customerId);
-        return reservations.stream()
+        List<ReservationResponse> response = reservations.stream()
                 .map(ReservationResponse::fromEntity)
                 .collect(Collectors.toList());
+        
+        // Cache the response
+        cacheCustomerReservations(customerId, response);
+        
+        return response;
     }
 
     /**
-     * Get active reservations for equipment
+     * Get active reservations for equipment with caching
      */
     public List<ReservationResponse> getEquipmentReservations(UUID productId) {
         Log.debugf("Getting reservations for product %s", productId);
 
+        // Try cache first
+        List<ReservationResponse> cached = getCachedEquipmentReservations(productId);
+        if (cached != null) {
+            return cached;
+        }
+
         List<StockReservation> reservations = StockReservation.findByProductId(productId);
-        return reservations.stream()
+        List<ReservationResponse> response = reservations.stream()
                 .map(ReservationResponse::fromEntity)
                 .collect(Collectors.toList());
+        
+        // Cache the response
+        cacheEquipmentReservations(productId, response);
+        
+        return response;
     }
 
     /**
@@ -328,5 +403,179 @@ public class ReservationService {
         return reservations.stream()
                 .map(ReservationResponse::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    // Cache management methods
+
+    /**
+     * Cache reservation data
+     */
+    private void cacheReservation(ReservationResponse reservation) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = RESERVATION_CACHE_PREFIX + reservation.reservationId;
+            String serialized = objectMapper.writeValueAsString(reservation);
+            redisCommands.setex(cacheKey, CACHE_TTL_SECONDS, serialized);
+            Log.debugf("Cached reservation: %s", reservation.reservationId);
+        } catch (Exception e) {
+            Log.warnf("Failed to cache reservation %s: %s", reservation.reservationId, e.getMessage());
+        }
+    }
+
+    /**
+     * Get reservation from cache
+     */
+    private ReservationResponse getCachedReservation(UUID reservationId) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = RESERVATION_CACHE_PREFIX + reservationId;
+            String cached = redisCommands.get(cacheKey);
+            if (cached != null) {
+                Log.debugf("Cache hit for reservation: %s", reservationId);
+                return objectMapper.readValue(cached, ReservationResponse.class);
+            }
+        } catch (Exception e) {
+            Log.warnf("Failed to read cached reservation %s: %s", reservationId, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Invalidate reservation cache
+     */
+    private void invalidateReservationCache(UUID reservationId) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = RESERVATION_CACHE_PREFIX + reservationId;
+            keyCommands.del(cacheKey);
+            Log.debugf("Invalidated cache for reservation: %s", reservationId);
+        } catch (Exception e) {
+            Log.warnf("Failed to invalidate cache for reservation %s: %s", reservationId, e.getMessage());
+        }
+    }
+
+    /**
+     * Cache customer reservations list
+     */
+    private void cacheCustomerReservations(String customerId, List<ReservationResponse> reservations) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = CUSTOMER_RESERVATIONS_CACHE_PREFIX + customerId;
+            String serialized = objectMapper.writeValueAsString(reservations);
+            redisCommands.setex(cacheKey, CACHE_TTL_SECONDS / 2, serialized); // Shorter TTL for lists
+            Log.debugf("Cached customer reservations for: %s", customerId);
+        } catch (Exception e) {
+            Log.warnf("Failed to cache customer reservations for %s: %s", customerId, e.getMessage());
+        }
+    }
+
+    /**
+     * Get customer reservations from cache
+     */
+    @SuppressWarnings("unchecked")
+    private List<ReservationResponse> getCachedCustomerReservations(String customerId) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = CUSTOMER_RESERVATIONS_CACHE_PREFIX + customerId;
+            String cached = redisCommands.get(cacheKey);
+            if (cached != null) {
+                Log.debugf("Cache hit for customer reservations: %s", customerId);
+                return objectMapper.readValue(cached, 
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, ReservationResponse.class));
+            }
+        } catch (Exception e) {
+            Log.warnf("Failed to read cached customer reservations for %s: %s", customerId, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Invalidate customer reservations cache
+     */
+    private void invalidateCustomerReservationsCache(String customerId) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = CUSTOMER_RESERVATIONS_CACHE_PREFIX + customerId;
+            keyCommands.del(cacheKey);
+            Log.debugf("Invalidated cache for customer reservations: %s", customerId);
+        } catch (Exception e) {
+            Log.warnf("Failed to invalidate customer reservations cache for %s: %s", customerId, e.getMessage());
+        }
+    }
+
+    /**
+     * Cache equipment reservations list
+     */
+    private void cacheEquipmentReservations(UUID productId, List<ReservationResponse> reservations) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = EQUIPMENT_RESERVATIONS_CACHE_PREFIX + productId;
+            String serialized = objectMapper.writeValueAsString(reservations);
+            redisCommands.setex(cacheKey, CACHE_TTL_SECONDS / 2, serialized); // Shorter TTL for lists
+            Log.debugf("Cached equipment reservations for: %s", productId);
+        } catch (Exception e) {
+            Log.warnf("Failed to cache equipment reservations for %s: %s", productId, e.getMessage());
+        }
+    }
+
+    /**
+     * Get equipment reservations from cache
+     */
+    @SuppressWarnings("unchecked")
+    private List<ReservationResponse> getCachedEquipmentReservations(UUID productId) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = EQUIPMENT_RESERVATIONS_CACHE_PREFIX + productId;
+            String cached = redisCommands.get(cacheKey);
+            if (cached != null) {
+                Log.debugf("Cache hit for equipment reservations: %s", productId);
+                return objectMapper.readValue(cached, 
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, ReservationResponse.class));
+            }
+        } catch (Exception e) {
+            Log.warnf("Failed to read cached equipment reservations for %s: %s", productId, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Invalidate equipment reservations cache
+     */
+    private void invalidateEquipmentReservationsCache(UUID productId) {
+        if (redisCommands == null) {
+            init();
+        }
+
+        try {
+            String cacheKey = EQUIPMENT_RESERVATIONS_CACHE_PREFIX + productId;
+            keyCommands.del(cacheKey);
+            Log.debugf("Invalidated cache for equipment reservations: %s", productId);
+        } catch (Exception e) {
+            Log.warnf("Failed to invalidate equipment reservations cache for %s: %s", productId, e.getMessage());
+        }
     }
 }
