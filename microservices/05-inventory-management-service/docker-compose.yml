@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  inventory-db:
+    image: postgres:15
+    container_name: inventory-db
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory
+    ports:
+      - "5433:5432"
+    volumes:
+      - inventory_db_data:/var/lib/postgresql/data
+    networks:
+      - inventory-network
+
+  # Redis Cache
+  inventory-redis:
+    image: redis:7-alpine
+    container_name: inventory-redis
+    ports:
+      - "6380:6379"
+    networks:
+      - inventory-network
+
+  # Kafka (for events)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: inventory-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - inventory-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: inventory-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - inventory-network
+
+  # Inventory Management Service
+  inventory-service:
+    build: .
+    container_name: inventory-service
+    depends_on:
+      - inventory-db
+      - inventory-redis
+      - kafka
+    ports:
+      - "8085:8085"
+    environment:
+      DB_URL: jdbc:postgresql://inventory-db:5432/inventory_db
+      DB_USERNAME: inventory
+      DB_PASSWORD: inventory
+      REDIS_URL: redis://inventory-redis:6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - inventory-network
+    volumes:
+      - ./logs:/deployments/logs
+
+volumes:
+  inventory_db_data:
+
+networks:
+  inventory-network:
+    driver: bridge
