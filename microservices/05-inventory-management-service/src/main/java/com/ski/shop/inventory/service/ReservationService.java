@@ -80,8 +80,12 @@ public class ReservationService {
         reservation.referenceNumber = request.referenceNumber;
         reservation.notes = request.notes;
 
-        // Persist the reservation (this will trigger the database trigger to update equipment)
+        // Persist the reservation first
         reservation.persist();
+
+        // Update equipment pending reservations in the same transaction
+        equipment.pendingReservations += request.quantity;
+        equipment.persist();
 
         Log.infof("Reservation created successfully: %s", reservation.reservationId);
 
@@ -154,8 +158,9 @@ public class ReservationService {
 
         Equipment equipment = equipmentOpt.get();
         
-        // Move stock from available to reserved (atomic operation)
+        // Move stock from available to reserved and reduce pending reservations (atomic operation)
         equipment.reserveStock(reservation.quantity);
+        equipment.pendingReservations -= reservation.quantity;
         equipment.persist();
 
         // Update reservation status
@@ -187,13 +192,22 @@ public class ReservationService {
         }
 
         boolean wasConfirmed = reservation.status == StockReservation.ReservationStatus.CONFIRMED;
+        boolean wasPending = reservation.status == StockReservation.ReservationStatus.PENDING;
 
-        // If reservation was confirmed, we need to release the reserved stock back to available
+        // Handle stock and pending reservations based on current status
         if (wasConfirmed) {
+            // If reservation was confirmed, get equipment and release reserved stock back to available
             Optional<Equipment> equipmentOpt = equipmentRepository.findByIdForUpdate(reservation.equipmentId);
             if (equipmentOpt.isPresent()) {
                 Equipment equipment = equipmentOpt.get();
                 equipment.releaseReservedStock(reservation.quantity);
+                equipment.persist();
+            }
+        } else if (wasPending) {
+            // If reservation was pending, just reduce pending reservations count from the current equipment
+            Equipment equipment = equipmentRepository.findById(reservation.equipmentId);
+            if (equipment != null) {
+                equipment.pendingReservations -= reservation.quantity;
                 equipment.persist();
             }
         }
@@ -281,6 +295,15 @@ public class ReservationService {
         for (StockReservation reservation : expiredReservations) {
             try {
                 Log.infof("Expiring reservation %s", reservation.reservationId);
+                
+                // Update equipment pending reservations for expired reservations
+                if (reservation.status == StockReservation.ReservationStatus.PENDING) {
+                    Equipment equipment = equipmentRepository.findById(reservation.equipmentId);
+                    if (equipment != null) {
+                        equipment.pendingReservations -= reservation.quantity;
+                        equipment.persist();
+                    }
+                }
                 
                 reservation.expire();
                 reservation.persist();

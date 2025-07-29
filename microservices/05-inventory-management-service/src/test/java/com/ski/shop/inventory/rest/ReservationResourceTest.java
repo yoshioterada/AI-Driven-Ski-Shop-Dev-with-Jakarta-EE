@@ -30,7 +30,8 @@ class ReservationResourceTest {
     @BeforeEach
     @Transactional
     void setUp() {
-        // Clean up any existing test data
+        // Clean up any existing test data - order matters due to foreign keys
+        Equipment.getEntityManager().createQuery("DELETE FROM StockReservation").executeUpdate();
         Equipment.deleteAll();
 
         // Create test equipment
