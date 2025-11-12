@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { USER_MANAGEMENT_BASE_URL, API_TIMEOUT, STORAGE_KEYS } from '@/utils/constants';
 
 /**
