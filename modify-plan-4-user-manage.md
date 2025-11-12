@@ -144,7 +144,6 @@ stateDiagram-v2
   UpdatePassword --> UpdatePassword : 4xx 応答\n再入力
 
   UpdateComplete --> UpdateProfile : プロフィールへ戻る
-  DeleteComplete --> Register : 再登録導線
 ```
 
 各画面での API 呼び出し結果に応じて、完了画面・エラー表示・再入力フローを制御する。
