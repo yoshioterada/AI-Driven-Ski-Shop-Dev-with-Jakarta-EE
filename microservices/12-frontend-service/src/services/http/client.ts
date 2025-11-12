@@ -167,6 +167,45 @@ class HttpClient {
   }
 
   /**
+   * RAW GETリクエスト（レスポンスをラップしない）
+   */
+  public async getRaw<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.instance.get<T>(url, config);
+    return response.data;
+  }
+
+  /**
+   * RAW POSTリクエスト（レスポンスをラップしない）
+   */
+  public async postRaw<T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response = await this.instance.post<T>(url, data, config);
+    return response.data;
+  }
+
+  /**
+   * RAW PUTリクエスト（レスポンスをラップしない）
+   */
+  public async putRaw<T>(
+    url: string,
+    data?: unknown,
+    config?: AxiosRequestConfig
+  ): Promise<T> {
+    const response = await this.instance.put<T>(url, data, config);
+    return response.data;
+  }
+
+  /**
+   * RAW DELETEリクエスト（レスポンスをラップしない、204の場合はvoidを返す）
+   */
+  public async deleteRaw(url: string, config?: AxiosRequestConfig): Promise<void> {
+    await this.instance.delete(url, config);
+  }
+
+  /**
    * ファイルアップロード
    */
   public async upload<T>(

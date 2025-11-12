@@ -252,6 +252,23 @@ public class UserResource {
         }
     }
     
+    @DELETE
+    @Path("/{id}")
+    @Operation(summary = "Delete user", description = "Delete a user account permanently")
+    @APIResponse(responseCode = "204", description = "User deleted successfully")
+    @APIResponse(responseCode = "404", description = "User not found")
+    public Response deleteUser(@PathParam("id") Long id) {
+        try {
+            userService.deleteUser(id);
+            return Response.noContent().build();
+            
+        } catch (UserService.UserServiceException e) {
+            return Response.status(Response.Status.NOT_FOUND)
+                .entity(new ErrorResponse("USER_NOT_FOUND", e.getMessage()))
+                .build();
+        }
+    }
+    
     @GET
     @Path("/statistics")
     @Operation(summary = "Get user statistics", description = "Retrieve user statistics and counts")

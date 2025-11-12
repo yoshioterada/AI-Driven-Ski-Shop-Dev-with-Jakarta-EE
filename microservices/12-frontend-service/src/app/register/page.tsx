@@ -3,18 +3,23 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { createUser } from '@/services/api/userManagement';
+import { validateEmail, validatePassword, validateUsername } from '@/utils/validators';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
+    username: '',
     email: '',
     password: '',
     confirmPassword: '',
     firstName: '',
     lastName: '',
+    phoneNumber: '',
     acceptTerms: false
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
   const router = useRouter();
 
@@ -22,26 +27,80 @@ export default function RegisterPage() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setFieldErrors({});
 
-    // パスワード確認のバリデーション
+    // Validation
+    const errors: Record<string, string> = {};
+
+    // Username validation
+    const usernameValidation = validateUsername(formData.username);
+    if (!usernameValidation.isValid) {
+      errors.username = usernameValidation.errors[0];
+    }
+
+    // Email validation
+    if (!validateEmail(formData.email)) {
+      errors.email = 'メールアドレスの形式が正しくありません';
+    }
+
+    // Password validation
+    const passwordValidation = validatePassword(formData.password);
+    if (!passwordValidation.isValid) {
+      errors.password = passwordValidation.errors[0];
+    }
+
+    // Password confirmation validation
     if (formData.password !== formData.confirmPassword) {
-      setError('パスワードが一致しません。');
+      errors.confirmPassword = 'パスワードが一致しません';
+    }
+
+    // Required fields
+    if (!formData.firstName.trim()) {
+      errors.firstName = '姓は必須です';
+    }
+    if (!formData.lastName.trim()) {
+      errors.lastName = '名は必須です';
+    }
+    if (!formData.acceptTerms) {
+      errors.acceptTerms = '利用規約に同意してください';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       setIsLoading(false);
       return;
     }
 
     try {
-      // 新規登録処理をここに実装
-      console.log('新規登録試行:', formData);
+      // Create user via User Management Service
+      await createUser({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber || undefined,
+        role: 'CUSTOMER',
+      });
+
+      // Reset form
+      setFormData({
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+        firstName: '',
+        lastName: '',
+        phoneNumber: '',
+        acceptTerms: false
+      });
+
+      // Redirect to completion page
+      router.push('/registration-complete');
       
-      // サンプル: 2秒後にログインページにリダイレクト
-      setTimeout(() => {
-        setIsLoading(false);
-        router.push('/login');
-      }, 2000);
-      
-    } catch {
-      setError('新規登録に失敗しました。入力内容を確認してください。');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '新規登録に失敗しました。入力内容を確認してください。';
+      setError(errorMessage);
       setIsLoading(false);
     }
   };
@@ -81,7 +140,7 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
-                  姓
+                  姓 <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="firstName"
@@ -89,13 +148,18 @@ export default function RegisterPage() {
                   value={formData.firstName}
                   onChange={(e) => handleChange('firstName', e.target.value)}
                   required
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                    fieldErrors.firstName ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 />
+                {fieldErrors.firstName && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.firstName}</p>
+                )}
               </div>
 
               <div>
                 <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
-                  名
+                  名 <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="lastName"
@@ -103,14 +167,39 @@ export default function RegisterPage() {
                   value={formData.lastName}
                   onChange={(e) => handleChange('lastName', e.target.value)}
                   required
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                    fieldErrors.lastName ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 />
+                {fieldErrors.lastName && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.lastName}</p>
+                )}
               </div>
             </div>
 
             <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                ユーザー名 <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={formData.username}
+                onChange={(e) => handleChange('username', e.target.value)}
+                required
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  fieldErrors.username ? 'border-red-300' : 'border-gray-300'
+                }`}
+              />
+              {fieldErrors.username && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.username}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">3〜20文字、英数字・ハイフン・アンダースコアのみ</p>
+            </div>
+
+            <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                メールアドレス
+                メールアドレス <span className="text-red-500">*</span>
               </label>
               <input
                 id="email"
@@ -118,13 +207,31 @@ export default function RegisterPage() {
                 value={formData.email}
                 onChange={(e) => handleChange('email', e.target.value)}
                 required
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  fieldErrors.email ? 'border-red-300' : 'border-gray-300'
+                }`}
+              />
+              {fieldErrors.email && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
+              )}
+            </div>
+
+            <div>
+              <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">
+                電話番号（任意）
+              </label>
+              <input
+                id="phoneNumber"
+                type="tel"
+                value={formData.phoneNumber}
+                onChange={(e) => handleChange('phoneNumber', e.target.value)}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                パスワード
+                パスワード <span className="text-red-500">*</span>
               </label>
               <input
                 id="password"
@@ -132,14 +239,19 @@ export default function RegisterPage() {
                 value={formData.password}
                 onChange={(e) => handleChange('password', e.target.value)}
                 required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  fieldErrors.password ? 'border-red-300' : 'border-gray-300'
+                }`}
               />
-              <p className="mt-1 text-xs text-gray-500">8文字以上、大文字・小文字・数字を含む</p>
+              {fieldErrors.password && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">8文字以上、大文字・小文字・数字・特殊文字を含む</p>
             </div>
 
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                パスワード確認
+                パスワード確認 <span className="text-red-500">*</span>
               </label>
               <input
                 id="confirmPassword"
@@ -147,29 +259,41 @@ export default function RegisterPage() {
                 value={formData.confirmPassword}
                 onChange={(e) => handleChange('confirmPassword', e.target.value)}
                 required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  fieldErrors.confirmPassword ? 'border-red-300' : 'border-gray-300'
+                }`}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
 
-            <div className="flex items-center">
-              <input
-                id="accept-terms"
-                type="checkbox"
-                checked={formData.acceptTerms}
-                onChange={(e) => handleChange('acceptTerms', e.target.checked)}
-                required
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <label htmlFor="accept-terms" className="ml-2 block text-sm text-gray-900">
-                <Link href="/terms" className="text-blue-600 hover:text-blue-500">
-                  利用規約
-                </Link>
-                と
-                <Link href="/privacy" className="text-blue-600 hover:text-blue-500">
-                  プライバシーポリシー
-                </Link>
-                に同意します
-              </label>
+            <div>
+              <div className="flex items-center">
+                <input
+                  id="accept-terms"
+                  type="checkbox"
+                  checked={formData.acceptTerms}
+                  onChange={(e) => handleChange('acceptTerms', e.target.checked)}
+                  required
+                  className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded ${
+                    fieldErrors.acceptTerms ? 'border-red-300' : ''
+                  }`}
+                />
+                <label htmlFor="accept-terms" className="ml-2 block text-sm text-gray-900">
+                  <Link href="/terms" className="text-blue-600 hover:text-blue-500">
+                    利用規約
+                  </Link>
+                  と
+                  <Link href="/privacy" className="text-blue-600 hover:text-blue-500">
+                    プライバシーポリシー
+                  </Link>
+                  に同意します <span className="text-red-500">*</span>
+                </label>
+              </div>
+              {fieldErrors.acceptTerms && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.acceptTerms}</p>
+              )}
             </div>
 
             <button
