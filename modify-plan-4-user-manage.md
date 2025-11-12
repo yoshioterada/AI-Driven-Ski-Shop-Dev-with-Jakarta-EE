@@ -207,8 +207,8 @@ stateDiagram-v2
 
     UpdateComplete --> UpdateProfile : プロフィールへ戻る
     DeleteComplete --> Register : 再登録導線
-  RegisterComplete --> Login : ログイン画面へ誘導
-  UpdateComplete --> Login : 再認証が必要な場合
+    RegisterComplete --> Login : ログイン画面へ誘導
+    UpdateComplete --> Login : 再認証が必要な場合
 ```
 
 各画面で API レスポンスの成否に応じて分岐し、ユーザー体験を損なわないよう共通 UX パターンを適用する。
