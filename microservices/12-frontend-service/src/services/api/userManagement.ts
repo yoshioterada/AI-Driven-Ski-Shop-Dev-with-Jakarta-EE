@@ -70,7 +70,7 @@ class UserManagementClient {
     this.instance.interceptors.request.use(
       (config) => {
         // Add authentication token if available (except for create user endpoint)
-        if (typeof window !== 'undefined' && !config.url?.includes('/users') || config.method !== 'post') {
+        if (typeof window !== 'undefined' && !(config.url?.includes('/users') && config.method === 'post')) {
           const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
           if (token) {
             config.headers.Authorization = `Bearer ${token}`;
