@@ -152,6 +152,17 @@ public class UserService {
     }
     
     /**
+     * Delete user (hard delete)
+     */
+    public void deleteUser(Long userId) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new UserServiceException("User not found with ID: " + userId));
+        
+        userRepository.delete(user);
+        logger.info("Deleted user: " + user.getUsername());
+    }
+    
+    /**
      * Deactivate user (soft delete)
      */
     public void deactivateUser(Long userId) {

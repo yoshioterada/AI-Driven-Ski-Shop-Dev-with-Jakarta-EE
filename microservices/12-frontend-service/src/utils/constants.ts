@@ -5,6 +5,8 @@ export const APP_DESCRIPTION = 'スキー用品専門オンラインショップ
 
 // API設定
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+export const USER_MANAGEMENT_BASE_URL = process.env.NEXT_PUBLIC_USER_MANAGEMENT_URL || 
+  `${API_BASE_URL}/user-management-service/api`;
 export const API_TIMEOUT = 30000; // 30秒
 export const API_RETRY_COUNT = 3;
 export const API_RETRY_DELAY = 1000; // 1秒
