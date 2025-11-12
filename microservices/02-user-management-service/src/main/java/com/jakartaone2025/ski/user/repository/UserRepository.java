@@ -4,7 +4,7 @@ import com.jakartaone2025.ski.user.entity.User;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
-import jakarta.persistence.PersistenceContext;
+import jakarta.inject.Inject;
 import jakarta.persistence.TypedQuery;
 import jakarta.transaction.Transactional;
 import java.util.List;
@@ -20,7 +20,7 @@ public class UserRepository {
     
     private static final Logger logger = Logger.getLogger(UserRepository.class.getName());
     
-    @PersistenceContext
+    @Inject
     private EntityManager entityManager;
     
     /**

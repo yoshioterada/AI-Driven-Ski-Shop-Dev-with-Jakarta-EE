@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: skiresortdb
+      POSTGRES_USER: skiresort
+      POSTGRES_PASSWORD: skiresort
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skiresort"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  user-management-service:
+    build: .
+    ports:
+      - "8081:8081"
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/skiresortdb
+      DATABASE_USER: skiresort
+      DATABASE_PASSWORD: skiresort
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

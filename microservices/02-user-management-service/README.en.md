@@ -15,14 +15,12 @@ This service provides the following user management functions:
 
 ## Technology Stack
 
-- **Jakarta EE 11**: Enterprise Java framework
+- **Quarkus 3**: Kubernetes-native Java runtime
 - **Java 21 LTS**: Programming language
-- **WildFly 31.0.1**: Application server
+- **RESTEasy Reactive**: JAX-RS implementation
+- **Hibernate ORM / Bean Validation**: Data access and validation
 - **PostgreSQL**: Main database
-- **Redis**: Cache and session management
-- **MicroProfile Config**: Configuration management
-- **MicroProfile Health**: Health checks
-- **Bean Validation**: Data validation
+- **SmallRye OpenAPI / Health**: API documentation and health checks
 
 ## Architecture
 
@@ -175,27 +173,41 @@ CREATE TABLE user_profiles (
 - Java 21 LTS
 - Maven 3.9+
 - PostgreSQL 15+
-- Redis 7+
-- WildFly 31.0.1
 
 ### Build
 
 ```bash
-# Maven build
-mvn clean compile
+# Start Quarkus in dev mode
+mvn quarkus:dev
 
 # Run tests
 mvn test
 
-# Create package
+# Create an executable JAR
 mvn package
 ```
 
-### Deploy
+### Run
 
 ```bash
-# Deploy to WildFly
-cp target/user-management-service.war $WILDFLY_HOME/standalone/deployments/
+# Run the uber-jar standalone
+java -jar target/user-management-service-1.0.0-SNAPSHOT-runner.jar
+
+# Example request
+curl http://localhost:8081/user-management-service/api/users
+```
+
+### Docker / Compose
+
+```bash
+# Build images and start the stack
+docker compose up --build -d
+
+# Smoke test
+curl http://localhost:8081/user-management-service/api/users
+
+# Tear down
+docker compose down
 ```
 
 ### Docker Run

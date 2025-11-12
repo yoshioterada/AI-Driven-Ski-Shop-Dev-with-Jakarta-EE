@@ -15,14 +15,12 @@
 
 ## 技術スタック
 
-- **Jakarta EE 11**: エンタープライズJavaフレームワーク
+- **Quarkus 3**: ネイティブクラウド向け Java ランタイム
 - **Java 21 LTS**: プログラミング言語
-- **WildFly 31.0.1**: アプリケーションサーバー
+- **RESTEasy Reactive**: JAX-RS 実装
+- **Hibernate ORM / Bean Validation**: データアクセスと検証
 - **PostgreSQL**: メインデータベース
-- **Redis**: キャッシュ・セッション管理
-- **MicroProfile Config**: 設定管理
-- **MicroProfile Health**: ヘルスチェック
-- **Bean Validation**: データ検証
+- **SmallRye OpenAPI / Health**: API ドキュメンテーションとヘルスチェック
 
 ## アーキテクチャ
 
@@ -175,27 +173,41 @@ CREATE TABLE user_profiles (
 - Java 21 LTS
 - Maven 3.9+
 - PostgreSQL 15+
-- Redis 7+
-- WildFly 31.0.1
 
 ### ビルド
 
 ```bash
-# Maven ビルド
-mvn clean compile
+# Quarkus のデベロップメントモード
+mvn quarkus:dev
 
 # テスト実行
 mvn test
 
-# パッケージ作成
+# 実行可能 JAR の作成
 mvn package
 ```
 
-### デプロイ
+### 実行
 
 ```bash
-# WildFlyにデプロイ
-cp target/user-management-service.war $WILDFLY_HOME/standalone/deployments/
+# Uber-JAR を使ったスタンドアローン実行
+java -jar target/user-management-service-1.0.0-SNAPSHOT-runner.jar
+
+# HTTP エンドポイント例
+curl http://localhost:8081/user-management-service/api/users
+```
+
+### Docker / Compose
+
+```bash
+# イメージのビルドと起動
+docker compose up --build -d
+
+# 動作確認 (例)
+curl http://localhost:8081/user-management-service/api/users
+
+# 停止
+docker compose down
 ```
 
 ### Docker実行
