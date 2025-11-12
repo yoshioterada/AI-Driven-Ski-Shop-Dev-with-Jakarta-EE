@@ -99,8 +99,10 @@ class UserManagementClient {
         
         // Handle 401 - unauthorized
         if (error.response?.status === 401) {
-          // Redirect to login
+          // Clear auth tokens and redirect to login
           if (typeof window !== 'undefined') {
+            localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
             window.location.href = '/login';
           }
         }
