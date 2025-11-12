@@ -77,7 +77,9 @@ class UserManagementClient {
           }
         }
         
-        console.log(`[UserManagement] ${config.method?.toUpperCase()} ${config.url}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[UserManagement] ${config.method?.toUpperCase()} ${config.url}`);
+        }
         return config;
       },
       (error) => {
